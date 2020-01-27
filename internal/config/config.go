@@ -49,8 +49,15 @@ func Setup() {
 	for _, e := range os.Environ() {
 		pair := strings.SplitN(e, "=", 2)
 		if strings.HasPrefix(pair[0], "GITHUB_CONTEXT_") {
-			contextRegexp := regexp.MustCompile(pair[1])
-			repoRegexp := regexp.MustCompile(strings.TrimPrefix(pair[0], "GITHUB_CONTEXT_"))
+			contextRegexp, err := regexp.Compile(pair[1])
+			if err != nil {
+				log.Fatalf("Could not compile the regex passed via %s, err=%s, exiting.", pair[0], err)
+			}
+			regex := strings.TrimPrefix(pair[0], "GITHUB_CONTEXT_")
+			repoRegexp, err := regexp.Compile(regex)
+			if err != nil {
+				log.Fatalf("Could not compile the regex '%s' passed via %s, err=%s, exiting.", regex, pair[0], err)
+			}
 			githubContexts[repoRegexp] = contextRegexp
 		}
 	}
