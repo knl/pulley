@@ -23,6 +23,7 @@ type config struct { // nolint
 	WebhookPath    string                            // WEBHOOK_PATH
 	WebhookToken   []byte                            // WEBHOOK_TOKEN
 	GitHubContexts map[*regexp.Regexp]*regexp.Regexp // GITHUB_CONTEXT_repo_regex = regex
+	MetricsPath    string                            // METRICS_PATH
 }
 
 // Setup configurations with environment variables
@@ -35,13 +36,13 @@ func Setup() {
 	if !ok {
 		port = "1701"
 	}
-	webhookPath, ok := os.LookupEnv("WEBHOOK_PATH")
-	if !ok {
-		webhookPath = "webhook"
-	}
 	webhookToken, err := base64.StdEncoding.DecodeString(os.Getenv("WEBHOOK_TOKEN"))
 	if err != nil {
 		log.Fatal("Could not decode the webhook secret token from WEBHOOK_TOKEN", err)
+	}
+	metricsPath, ok := os.LookupEnv("METRICS_PATH")
+	if !ok {
+		metricsPath = "metricz"
 	}
 	// Process all GITHUB_CONTEXT fields
 	githubContexts := make(map[*regexp.Regexp]*regexp.Regexp)
@@ -59,8 +60,9 @@ func Setup() {
 	Config = &config{
 		Port:           port,
 		Host:           host,
-		WebhookPath:    webhookPath,
+		WebhookPath:    os.Getenv("WEBHOOK_PATH"),
 		WebhookToken:   webhookToken,
 		GitHubContexts: githubContexts,
+		MetricsPath:    metricsPath,
 	}
 }

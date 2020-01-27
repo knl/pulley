@@ -11,9 +11,59 @@ import (
 	"time"
 
 	"github.com/google/go-github/v29/github"
-	//"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"prosli/internal/config"
+)
+
+// https://godoc.org/github.com/prometheus/client_golang/prometheus
+var (
+	prEvents = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "github_pull_request_events_total",
+		Help: "The number of various Pull Request events",
+	},
+		[]string{"repository", "event"},
+	)
+	branchRebases = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "github_branch_rebases_total",
+		Help: "The number branch rebases",
+	},
+		[]string{"repository"},
+	)
+	branchEvents = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "github_branch_events_total",
+		Help: "The number branch creations and deletions",
+	},
+		[]string{"repository", "event"},
+	)
+	prStartTime = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "github_ci_start_time_seconds",
+			Help: "The time it takes for a CI to build a PR, measured from opening the PR until the required status check is finished, per status",
+			// Start from 1 second, move up to 8*1024 seconds (~80min)
+			Buckets: prometheus.ExponentialBuckets(1, 2, 14),
+		},
+		[]string{"repository"},
+	)
+	prValidationTime = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "github_ci_validation_time_seconds",
+			Help: "The time it takes for a CI to build a PR, measured from opening the PR until the required status check is finished, per status",
+			// Start from 1 second, move up to 8*1024 seconds (~80min)
+			Buckets: prometheus.ExponentialBuckets(1, 2, 14),
+		},
+		[]string{"repository", "status"},
+	)
+	prMergeTime = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "github_merge_time_seconds",
+			Help: "The time it takes for a PR, measured from opening the PR",
+			// Start from 1 second, move up to 8*1024 seconds (~80min)
+			Buckets: prometheus.ExponentialBuckets(1, 2, 14),
+		},
+		[]string{"repository"},
+	)
 )
 
 // When there is an update to a Pull Request, such as creation, closing, re-opening
@@ -170,33 +220,36 @@ func MetricsProcessor(contextOk contextChecker) (chan<- PullUpdate, chan<- Commi
 					liveSHAs[p.SHA] = p.Timestamp
 				} else if p.Action == "closed" {
 					delete(liveSHAs, p.SHA)
+					if p.Merged {
+						mergeTime := p.Timestamp.Sub(liveSHAs[p.SHA]).Seconds()
+						prMergeTime.With(prometheus.Labels{"repository": p.Repo}).Observe(mergeTime)
+					}
 				}
+				prEvents.With(prometheus.Labels{"repository": p.Repo, "event": p.Action}).Inc()
 			case br := <-brUp:
 				log.Printf("updated a branch to commit: %s (from %s)", br.SHA, br.OldSHA)
 				if br.Created {
 					// we are not interested in created, as it should be handled by the PR creation
+					branchEvents.With(prometheus.Labels{"repository": br.Repo, "event": "created"}).Inc()
 					continue
 				}
 				if br.Deleted {
 					// br.SHA would be all 0s, we need OldSHA here
 					log.Printf("Branch is deleted, removing live SHA %s", br.OldSHA)
 					delete(liveSHAs, br.SHA)
+					branchEvents.With(prometheus.Labels{"repository": br.Repo, "event": "deleted"}).Inc()
 				} else {
 					// This means the branch was updated
 					log.Printf("Branch is updated, replacing live SHA %s with %s", br.OldSHA, br.SHA)
 					delete(liveSHAs, br.OldSHA)
 					liveSHAs[br.SHA] = br.Timestamp
+					branchRebases.With(prometheus.Labels{"repository": br.Repo}).Inc()
 				}
 			case c := <-cUp:
 				// track good, bad, overall
 				// Find which PRs are the ones with the status as the HEAD
 				// and use that
 				log.Printf("updated commit: %s context: %s status: %s", c.SHA, c.Context, c.Status)
-				// We only match certain contexts
-				if !contextOk(c.Repo, c.Context) {
-					log.Printf("skipping context %s", c.Context)
-					continue
-				}
 				if _, ok := liveSHAs[c.SHA]; !ok {
 					log.Printf("Could not find the start time for SHA %s, skipping", c.SHA)
 					continue
@@ -204,8 +257,19 @@ func MetricsProcessor(contextOk contextChecker) (chan<- PullUpdate, chan<- Commi
 				switch c.Status {
 				case "pending":
 					log.Printf("CI Start time for SHA %s is %s", c.SHA, c.Timestamp.Sub(liveSHAs[c.SHA]))
+					startTime := c.Timestamp.Sub(liveSHAs[c.SHA]).Seconds()
+					prStartTime.With(prometheus.Labels{"repository": c.Repo}).Observe(startTime)
 				case "success", "failure", "error":
+					// We only match certain contexts here
+					// Not done for pending, as there we want to observe the very first check
+					if !contextOk(c.Repo, c.Context) {
+						log.Printf("skipping context %s", c.Context)
+						break
+					}
 					log.Printf("Validation time for SHA %s is %s with status %s", c.SHA, c.Timestamp.Sub(liveSHAs[c.SHA]), c.Status)
+					validationTime := c.Timestamp.Sub(liveSHAs[c.SHA]).Seconds()
+					prValidationTime.With(prometheus.Labels{"repository": c.Repo, "status": c.Status}).Observe(validationTime)
+
 				default:
 					log.Printf("Unknown status type %s", c.Status)
 				}
@@ -215,33 +279,22 @@ func MetricsProcessor(contextOk contextChecker) (chan<- PullUpdate, chan<- Commi
 	return prUp, cUp, brUp
 }
 
-// https://godoc.org/github.com/prometheus/client_golang/prometheus
-// var (
-// 	cpuTemp = prometheus.NewGauge(prometheus.GaugeOpts{
-// 		Name: "cpu_temperature_celsius",
-// 		Help: "Current temperature of the CPU.",
-// 	})
-// 	hdFailures = prometheus.NewCounterVec(
-// 		prometheus.CounterOpts{
-// 			Name: "hd_errors_total",
-// 			Help: "Number of hard-disk errors.",
-// 		},
-// 		[]string{"device"},
-// 	)
-// )
-
-// func init() {
-// 	// Metrics have to be registered to be exposed:
-// 	prometheus.MustRegister(cpuTemp)
-// 	prometheus.MustRegister(hdFailures)
-// }
+func init() {
+	// Metrics have to be registered to be exposed:
+	prometheus.MustRegister(prEvents)
+	prometheus.MustRegister(branchRebases)
+	prometheus.MustRegister(branchEvents)
+	prometheus.MustRegister(prValidationTime)
+	prometheus.MustRegister(prStartTime)
+	prometheus.MustRegister(prMergeTime)
+}
 
 func main() {
 	log.Println("server started")
 
 	prUp, cUp, brUp := MetricsProcessor(makeContextChecker(config.Config.GitHubContexts))
 	http.HandleFunc("/"+config.Config.WebhookPath, HookHandler(config.Config.WebhookToken, prUp, cUp, brUp))
-	// http.Handle("/metrics", promhttp.Handler())
+	http.Handle("/"+config.Config.MetricsPath, promhttp.Handler())
 
 	// Listen & Serve
 	addr := net.JoinHostPort(config.Config.Host, config.Config.Port)
