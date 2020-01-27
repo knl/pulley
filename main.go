@@ -102,19 +102,24 @@ func HookHandler(token []byte, updates chan<- interface{}) http.HandlerFunc {
 			w.WriteHeader(405) // Return 405 Method Not Allowed.
 			return
 		}
+
 		payload, err := github.ValidatePayload(r, token)
 		if err != nil {
 			log.Printf("error reading request body: err=%s\n", err)
 			w.WriteHeader(400) // Return 400 Bad Request.
+
 			return
 		}
 		defer r.Body.Close()
+
 		event, err := github.ParseWebHook(github.WebHookType(r), payload)
 		if err != nil {
 			log.Printf("could not parse webhook: err=%s\n", err)
 			w.WriteHeader(400) // Return 400 Bad Request.
+
 			return
 		}
+
 		// send PR or Branch updates to the MetricsProcessor
 		// send commit status (from CircleCI) to the MetricsProcessor
 		switch e := event.(type) {
@@ -195,6 +200,7 @@ func MetricsProcessor(contextOk config.ContextChecker) chan<- interface{} {
 			case PullUpdate:
 				// When a PR is opened, its tracking starts.
 				log.Printf("updated pr: %d to commit: %s, action=%s\n", up.Number, up.SHA, up.Action)
+
 				if !actionsOfInterest[up.Action] {
 					log.Printf("Skipping action %s", up.Action)
 					break
@@ -205,14 +211,17 @@ func MetricsProcessor(contextOk config.ContextChecker) chan<- interface{} {
 					liveSHAs[up.SHA] = up.Timestamp
 				case "closed":
 					delete(liveSHAs, up.SHA)
+
 					if up.Merged {
 						mergeTime := up.Timestamp.Sub(liveSHAs[up.SHA]).Seconds()
 						prMergeTime.With(prometheus.Labels{"repository": up.Repo}).Observe(mergeTime)
 					}
 				}
+
 				prEvents.With(prometheus.Labels{"repository": up.Repo, "event": up.Action}).Inc()
 			case BranchUpdate:
 				log.Printf("updated a branch to commit: %s (from %s)", up.SHA, up.OldSHA)
+
 				switch {
 				case up.Created:
 					// we are not interested in created, as it should be handled by the PR creation
@@ -220,13 +229,17 @@ func MetricsProcessor(contextOk config.ContextChecker) chan<- interface{} {
 				case up.Deleted:
 					// up.SHA would be all 0s, we need OldSHA here
 					log.Printf("Branch is deleted, removing live SHA %s", up.OldSHA)
+
 					delete(liveSHAs, up.SHA)
+
 					branchEvents.With(prometheus.Labels{"repository": up.Repo, "event": "deleted"}).Inc()
 				default:
 					// This means the branch was updated
 					log.Printf("Branch is updated, replacing live SHA %s with %s", up.OldSHA, up.SHA)
+
 					delete(liveSHAs, up.OldSHA)
 					liveSHAs[up.SHA] = up.Timestamp
+
 					branchRebases.With(prometheus.Labels{"repository": up.Repo}).Inc()
 				}
 			case CommitUpdate:
@@ -234,10 +247,12 @@ func MetricsProcessor(contextOk config.ContextChecker) chan<- interface{} {
 				// Find which PRs are the ones with the status as the HEAD
 				// and use that
 				log.Printf("updated commit: %s context: %s status: %s", up.SHA, up.Context, up.Status)
+
 				if _, ok := liveSHAs[up.SHA]; !ok {
 					log.Printf("Could not find the start time for SHA %s, skipping", up.SHA)
 					break
 				}
+
 				switch up.Status {
 				case "pending":
 					log.Printf("CI Start time for SHA %s is %s", up.SHA, up.Timestamp.Sub(liveSHAs[up.SHA]))
@@ -250,6 +265,7 @@ func MetricsProcessor(contextOk config.ContextChecker) chan<- interface{} {
 						log.Printf("skipping context %s", up.Context)
 						break
 					}
+
 					log.Printf("Validation time for SHA %s is %s with status %s", up.SHA, up.Timestamp.Sub(liveSHAs[up.SHA]), up.Status)
 					validationTime := up.Timestamp.Sub(liveSHAs[up.SHA]).Seconds()
 					prValidationTime.With(prometheus.Labels{"repository": up.Repo, "status": up.Status}).Observe(validationTime)
@@ -260,6 +276,7 @@ func MetricsProcessor(contextOk config.ContextChecker) chan<- interface{} {
 			}
 		}
 	}()
+
 	return updates
 }
 

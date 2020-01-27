@@ -10,7 +10,6 @@ linters:
    - gochecknoglobals  # TODO: remove
    - gochecknoinits  # TODO: remove
    - dupl
-   - wsl
    - lll
    - funlen  # TODO: remove
    - gomnd

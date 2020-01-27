@@ -35,6 +35,7 @@ func DefaultContextChecker() ContextChecker {
 				return true
 			}
 		}
+
 		return false
 	}
 }
@@ -45,20 +46,24 @@ func Setup() {
 	if !ok {
 		host = "localhost"
 	}
+
 	port, ok := os.LookupEnv("APP_PORT")
 	if !ok {
 		port = "1701"
 	}
+
 	webhookToken, err := base64.StdEncoding.DecodeString(os.Getenv("WEBHOOK_TOKEN"))
 	if err != nil {
 		log.Fatal("Could not decode the webhook secret token from WEBHOOK_TOKEN", err)
 	}
+
 	metricsPath, ok := os.LookupEnv("METRICS_PATH")
 	if !ok {
 		metricsPath = "metricz"
 	}
 	// Process all GITHUB_CONTEXT fields
 	githubContexts := make(map[*regexp.Regexp]*regexp.Regexp)
+
 	for _, e := range os.Environ() {
 		pair := strings.SplitN(e, "=", 2)
 		if strings.HasPrefix(pair[0], "GITHUB_CONTEXT_") {
@@ -66,17 +71,22 @@ func Setup() {
 			if err != nil {
 				log.Fatalf("Could not compile the regex passed via %s, err=%s, exiting.", pair[0], err)
 			}
+
 			regex := strings.TrimPrefix(pair[0], "GITHUB_CONTEXT_")
+
 			repoRegexp, err := regexp.Compile(regex)
 			if err != nil {
 				log.Fatalf("Could not compile the regex '%s' passed via %s, err=%s, exiting.", regex, pair[0], err)
 			}
+
 			githubContexts[repoRegexp] = contextRegexp
 		}
 	}
+
 	if len(githubContexts) == 0 {
 		githubContexts[regexp.MustCompile(".*")] = regexp.MustCompile(":all-jobs$")
 	}
+
 	Config = &config{
 		Port:           port,
 		Host:           host,
