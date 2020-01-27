@@ -96,7 +96,7 @@ type CommitUpdate struct {
 }
 
 // HookHandler parses GitHub webhooks and sends an update to MetricsProcessor.
-func HookHandler(token []byte, prUp chan<- PullUpdate, cUp chan<- CommitUpdate, brUp chan<- BranchUpdate) http.HandlerFunc {
+func HookHandler(token []byte, updates chan<- interface{}) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(405) // Return 405 Method Not Allowed.
@@ -119,7 +119,7 @@ func HookHandler(token []byte, prUp chan<- PullUpdate, cUp chan<- CommitUpdate, 
 		// send commit status (from CircleCI) to the MetricsProcessor
 		switch e := event.(type) {
 		case *github.PullRequestEvent:
-			prUp <- PullUpdate{
+			updates <- PullUpdate{
 				Number:    *e.Number,
 				SHA:       *e.PullRequest.Head.SHA,
 				Action:    *e.Action,
@@ -128,7 +128,7 @@ func HookHandler(token []byte, prUp chan<- PullUpdate, cUp chan<- CommitUpdate, 
 				Repo:      *e.Repo.FullName,
 			}
 		case *github.PushEvent:
-			brUp <- BranchUpdate{
+			updates <- BranchUpdate{
 				SHA:       *e.After,
 				OldSHA:    *e.Before,
 				Created:   *e.Created,
@@ -137,7 +137,7 @@ func HookHandler(token []byte, prUp chan<- PullUpdate, cUp chan<- CommitUpdate, 
 				Repo:      *e.Repo.FullName,
 			}
 		case *github.StatusEvent:
-			cUp <- CommitUpdate{
+			updates <- CommitUpdate{
 				// State is the new state. Possible values are: "pending", "success", "failure", "error".
 				Status:    *e.State,
 				Context:   *e.Context,
@@ -165,10 +165,8 @@ func HookHandler(token []byte, prUp chan<- PullUpdate, cUp chan<- CommitUpdate, 
 //
 // The assumption is that the CI builds everything (branches and PRs). If there are
 // branches that linger around, it's not a problem, because there aren't so many of them.
-	prUp := make(chan PullUpdate)
-	cUp := make(chan CommitUpdate)
-	brUp := make(chan BranchUpdate)
-func MetricsProcessor(contextOk config.ContextChecker) (chan<- PullUpdate, chan<- CommitUpdate, chan<- BranchUpdate) {
+func MetricsProcessor(contextOk config.ContextChecker) chan<- interface{} {
+	updates := make(chan interface{}, 100)
 
 	// Keep track of live SHAs -- we don't need separation per repository, as SHAs are pretty unique
 	// map[commitSHA]time
@@ -192,77 +190,77 @@ func MetricsProcessor(contextOk config.ContextChecker) (chan<- PullUpdate, chan<
 	}
 
 	go func() {
-		for {
-			select {
-			case p := <-prUp:
+		for update := range updates {
+			switch up := update.(type) {
+			case PullUpdate:
 				// When a PR is opened, its tracking starts.
-				log.Printf("updated pr: %d to commit: %s, action=%s\n", p.Number, p.SHA, p.Action)
-				if !actionsOfInterest[p.Action] {
-					log.Printf("Skipping action %s", p.Action)
+				log.Printf("updated pr: %d to commit: %s, action=%s\n", up.Number, up.SHA, up.Action)
+				if !actionsOfInterest[up.Action] {
+					log.Printf("Skipping action %s", up.Action)
 					break
 				}
 
-				switch p.Action {
+				switch up.Action {
 				case "opened", "reopened", "ready_for_review":
-					liveSHAs[p.SHA] = p.Timestamp
+					liveSHAs[up.SHA] = up.Timestamp
 				case "closed":
-					delete(liveSHAs, p.SHA)
-					if p.Merged {
-						mergeTime := p.Timestamp.Sub(liveSHAs[p.SHA]).Seconds()
-						prMergeTime.With(prometheus.Labels{"repository": p.Repo}).Observe(mergeTime)
+					delete(liveSHAs, up.SHA)
+					if up.Merged {
+						mergeTime := up.Timestamp.Sub(liveSHAs[up.SHA]).Seconds()
+						prMergeTime.With(prometheus.Labels{"repository": up.Repo}).Observe(mergeTime)
 					}
 				}
-				prEvents.With(prometheus.Labels{"repository": p.Repo, "event": p.Action}).Inc()
-			case br := <-brUp:
-				log.Printf("updated a branch to commit: %s (from %s)", br.SHA, br.OldSHA)
+				prEvents.With(prometheus.Labels{"repository": up.Repo, "event": up.Action}).Inc()
+			case BranchUpdate:
+				log.Printf("updated a branch to commit: %s (from %s)", up.SHA, up.OldSHA)
 				switch {
-				case br.Created:
+				case up.Created:
 					// we are not interested in created, as it should be handled by the PR creation
-					branchEvents.With(prometheus.Labels{"repository": br.Repo, "event": "created"}).Inc()
-				case br.Deleted:
-					// br.SHA would be all 0s, we need OldSHA here
-					log.Printf("Branch is deleted, removing live SHA %s", br.OldSHA)
-					delete(liveSHAs, br.SHA)
-					branchEvents.With(prometheus.Labels{"repository": br.Repo, "event": "deleted"}).Inc()
+					branchEvents.With(prometheus.Labels{"repository": up.Repo, "event": "created"}).Inc()
+				case up.Deleted:
+					// up.SHA would be all 0s, we need OldSHA here
+					log.Printf("Branch is deleted, removing live SHA %s", up.OldSHA)
+					delete(liveSHAs, up.SHA)
+					branchEvents.With(prometheus.Labels{"repository": up.Repo, "event": "deleted"}).Inc()
 				default:
 					// This means the branch was updated
-					log.Printf("Branch is updated, replacing live SHA %s with %s", br.OldSHA, br.SHA)
-					delete(liveSHAs, br.OldSHA)
-					liveSHAs[br.SHA] = br.Timestamp
-					branchRebases.With(prometheus.Labels{"repository": br.Repo}).Inc()
+					log.Printf("Branch is updated, replacing live SHA %s with %s", up.OldSHA, up.SHA)
+					delete(liveSHAs, up.OldSHA)
+					liveSHAs[up.SHA] = up.Timestamp
+					branchRebases.With(prometheus.Labels{"repository": up.Repo}).Inc()
 				}
-			case c := <-cUp:
+			case CommitUpdate:
 				// track good, bad, overall
 				// Find which PRs are the ones with the status as the HEAD
 				// and use that
-				log.Printf("updated commit: %s context: %s status: %s", c.SHA, c.Context, c.Status)
-				if _, ok := liveSHAs[c.SHA]; !ok {
-					log.Printf("Could not find the start time for SHA %s, skipping", c.SHA)
+				log.Printf("updated commit: %s context: %s status: %s", up.SHA, up.Context, up.Status)
+				if _, ok := liveSHAs[up.SHA]; !ok {
+					log.Printf("Could not find the start time for SHA %s, skipping", up.SHA)
 					break
 				}
-				switch c.Status {
+				switch up.Status {
 				case "pending":
-					log.Printf("CI Start time for SHA %s is %s", c.SHA, c.Timestamp.Sub(liveSHAs[c.SHA]))
-					startTime := c.Timestamp.Sub(liveSHAs[c.SHA]).Seconds()
-					prStartTime.With(prometheus.Labels{"repository": c.Repo}).Observe(startTime)
+					log.Printf("CI Start time for SHA %s is %s", up.SHA, up.Timestamp.Sub(liveSHAs[up.SHA]))
+					startTime := up.Timestamp.Sub(liveSHAs[up.SHA]).Seconds()
+					prStartTime.With(prometheus.Labels{"repository": up.Repo}).Observe(startTime)
 				case "success", "failure", "error":
 					// We only match certain contexts here
 					// Not done for pending, as there we want to observe the very first check
-					if !contextOk(c.Repo, c.Context) {
-						log.Printf("skipping context %s", c.Context)
+					if !contextOk(up.Repo, up.Context) {
+						log.Printf("skipping context %s", up.Context)
 						break
 					}
-					log.Printf("Validation time for SHA %s is %s with status %s", c.SHA, c.Timestamp.Sub(liveSHAs[c.SHA]), c.Status)
-					validationTime := c.Timestamp.Sub(liveSHAs[c.SHA]).Seconds()
-					prValidationTime.With(prometheus.Labels{"repository": c.Repo, "status": c.Status}).Observe(validationTime)
+					log.Printf("Validation time for SHA %s is %s with status %s", up.SHA, up.Timestamp.Sub(liveSHAs[up.SHA]), up.Status)
+					validationTime := up.Timestamp.Sub(liveSHAs[up.SHA]).Seconds()
+					prValidationTime.With(prometheus.Labels{"repository": up.Repo, "status": up.Status}).Observe(validationTime)
 
 				default:
-					log.Printf("Unknown status type %s", c.Status)
+					log.Printf("Unknown status type %s", up.Status)
 				}
 			}
 		}
 	}()
-	return prUp, cUp, brUp
+	return updates
 }
 
 func init() {
@@ -278,8 +276,8 @@ func init() {
 func main() {
 	log.Println("server started")
 
-	prUp, cUp, brUp := MetricsProcessor(config.DefaultContextChecker())
-	http.HandleFunc("/"+config.Config.WebhookPath, HookHandler(config.Config.WebhookToken, prUp, cUp, brUp))
+	updates := MetricsProcessor(config.DefaultContextChecker())
+	http.HandleFunc("/"+config.Config.WebhookPath, HookHandler(config.Config.WebhookToken, updates))
 	http.Handle("/"+config.Config.MetricsPath, promhttp.Handler())
 
 	// Listen & Serve
