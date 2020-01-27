@@ -26,6 +26,19 @@ type config struct { // nolint
 	MetricsPath    string                            // METRICS_PATH
 }
 
+type ContextChecker func(repo, context string) bool
+
+func DefaultContextChecker() ContextChecker {
+	return func(repo, context string) bool {
+		for repoRegexp, contextRegexp := range Config.GitHubContexts {
+			if repoRegexp.MatchString(repo) && contextRegexp.MatchString(context) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
 // Setup configurations with environment variables
 func Setup() {
 	host, ok := os.LookupEnv("APP_HOST")

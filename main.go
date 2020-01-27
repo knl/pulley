@@ -7,7 +7,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"regexp"
 	"time"
 
 	"github.com/google/go-github/v29/github"
@@ -152,19 +151,6 @@ func HookHandler(token []byte, prUp chan<- PullUpdate, cUp chan<- CommitUpdate, 
 	}
 }
 
-type contextChecker func(repo, context string) bool
-
-func makeContextChecker(cfg map[*regexp.Regexp]*regexp.Regexp) contextChecker {
-	return func(repo, context string) bool {
-		for repoRegexp, contextRegexp := range cfg {
-			if repoRegexp.MatchString(repo) && contextRegexp.MatchString(context) {
-				return true
-			}
-		}
-		return false
-	}
-}
-
 // MetricsProcessor receives updates when
 // - a pull request is opened/updated/closed
 // - a branch receives a new push (merge to master is a push event)
@@ -179,10 +165,10 @@ func makeContextChecker(cfg map[*regexp.Regexp]*regexp.Regexp) contextChecker {
 //
 // The assumption is that the CI builds everything (branches and PRs). If there are
 // branches that linger around, it's not a problem, because there aren't so many of them.
-func MetricsProcessor(contextOk contextChecker) (chan<- PullUpdate, chan<- CommitUpdate, chan<- BranchUpdate) {
 	prUp := make(chan PullUpdate)
 	cUp := make(chan CommitUpdate)
 	brUp := make(chan BranchUpdate)
+func MetricsProcessor(contextOk config.ContextChecker) (chan<- PullUpdate, chan<- CommitUpdate, chan<- BranchUpdate) {
 
 	// Keep track of live SHAs -- we don't need separation per repository, as SHAs are pretty unique
 	// map[commitSHA]time
@@ -292,7 +278,7 @@ func init() {
 func main() {
 	log.Println("server started")
 
-	prUp, cUp, brUp := MetricsProcessor(makeContextChecker(config.Config.GitHubContexts))
+	prUp, cUp, brUp := MetricsProcessor(config.DefaultContextChecker())
 	http.HandleFunc("/"+config.Config.WebhookPath, HookHandler(config.Config.WebhookToken, prUp, cUp, brUp))
 	http.Handle("/"+config.Config.MetricsPath, promhttp.Handler())
 
