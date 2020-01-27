@@ -5,12 +5,15 @@ package main
 
 import (
 	"log"
+	"net"
 	"net/http"
-	"strings"
+	"regexp"
 	"time"
 
 	"github.com/google/go-github/v29/github"
 	//"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"prosli/internal/config"
 )
 
 // When there is an update to a Pull Request, such as creation, closing, re-opening
@@ -41,14 +44,13 @@ type CommitUpdate struct {
 }
 
 // HookHandler parses GitHub webhooks and sends an update to MetricsProcessor.
-func HookHandler(prUp chan<- PullUpdate, cUp chan<- CommitUpdate, brUp chan<- BranchUpdate) http.HandlerFunc {
+func HookHandler(token []byte, prUp chan<- PullUpdate, cUp chan<- CommitUpdate, brUp chan<- BranchUpdate) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(405) // Return 405 Method Not Allowed.
 			return
 		}
-		// payload, err := github.ValidatePayload(r, []byte("my-secret-key"))
-		payload, err := github.ValidatePayload(r, nil)
+		payload, err := github.ValidatePayload(r, token)
 		if err != nil {
 			log.Printf("error reading request body: err=%s\n", err)
 			w.WriteHeader(400) // Return 400 Bad Request.
@@ -108,7 +110,7 @@ func HookHandler(prUp chan<- PullUpdate, cUp chan<- CommitUpdate, brUp chan<- Br
 //
 // The assumption is that the CI builds everything (branches and PRs). If there are
 // branches that linger around, it's not a problem, because there aren't so many of them.
-func MetricsProcessor() (chan<- PullUpdate, chan<- CommitUpdate, chan<- BranchUpdate) {
+func MetricsProcessor(githubContextRegexp *regexp.Regexp) (chan<- PullUpdate, chan<- CommitUpdate, chan<- BranchUpdate) {
 	prUp := make(chan PullUpdate)
 	cUp := make(chan CommitUpdate)
 	brUp := make(chan BranchUpdate)
@@ -172,7 +174,8 @@ func MetricsProcessor() (chan<- PullUpdate, chan<- CommitUpdate, chan<- BranchUp
 				// and use that
 				log.Printf("updated commit: %s context: %s status: %s", c.SHA, c.Context, c.Status)
 				// We only match certain contexts
-				if !strings.HasSuffix(c.Context, "all-jobs") {
+				if !githubContextRegexp.MatchString(c.Context) {
+					log.Printf("skipping context %s", c.Context)
 					continue
 				}
 				if _, ok := liveSHAs[c.SHA]; !ok {
@@ -217,9 +220,13 @@ func MetricsProcessor() (chan<- PullUpdate, chan<- CommitUpdate, chan<- BranchUp
 func main() {
 	log.Println("server started")
 
-	prUp, cUp, brUp := MetricsProcessor()
-	http.HandleFunc("/webhook", HookHandler(prUp, cUp, brUp))
+	prUp, cUp, brUp := MetricsProcessor(config.Config.GitHubContext)
+	http.HandleFunc("/"+config.Config.WebhookPath, HookHandler(config.Config.WebhookToken, prUp, cUp, brUp))
 	// http.Handle("/metrics", promhttp.Handler())
 
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	// Listen & Serve
+	addr := net.JoinHostPort(config.Config.Host, config.Config.Port)
+	log.Printf("[service] listening on %s", addr)
+
+	log.Fatal(http.ListenAndServe(addr, nil))
 }
