@@ -1,4 +1,4 @@
-module prosli
+module github.com/knl/pulley
 
 go 1.13
 

@@ -13,7 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"prosli/internal/config"
+	"github.com/knl/pulley/internal/config"
 )
 
 // https://godoc.org/github.com/prometheus/client_golang/prometheus
