@@ -18,6 +18,7 @@ import (
 
 // When there is an update to a Pull Request, such as creation, closing, re-opening
 type PullUpdate struct {
+	Repo      string
 	Action    string
 	SHA       string
 	Number    int
@@ -28,6 +29,7 @@ type PullUpdate struct {
 // When the branch has been updated, either due to a push or force-push
 // Not interested in closing, that PullUpdate handles
 type BranchUpdate struct {
+	Repo      string
 	SHA       string
 	OldSHA    string
 	Created   bool
@@ -37,6 +39,7 @@ type BranchUpdate struct {
 
 // When we get a status notification from CI
 type CommitUpdate struct {
+	Repo      string
 	Status    string
 	Context   string
 	SHA       string
@@ -73,6 +76,7 @@ func HookHandler(token []byte, prUp chan<- PullUpdate, cUp chan<- CommitUpdate, 
 				Action:    *e.Action,
 				Timestamp: *e.PullRequest.UpdatedAt,
 				Merged:    *e.PullRequest.Merged,
+				Repo:      *e.Repo.FullName,
 			}
 		case *github.PushEvent:
 			brUp <- BranchUpdate{
@@ -81,6 +85,7 @@ func HookHandler(token []byte, prUp chan<- PullUpdate, cUp chan<- CommitUpdate, 
 				Created:   *e.Created,
 				Deleted:   *e.Deleted,
 				Timestamp: e.Repo.PushedAt.Time,
+				Repo:      *e.Repo.FullName,
 			}
 		case *github.StatusEvent:
 			cUp <- CommitUpdate{
@@ -89,10 +94,24 @@ func HookHandler(token []byte, prUp chan<- PullUpdate, cUp chan<- CommitUpdate, 
 				Context:   *e.Context,
 				SHA:       *e.SHA,
 				Timestamp: e.UpdatedAt.Time,
+				Repo:      *e.Repo.FullName,
 			}
 		default:
 			log.Printf("unknown WebHookType: %s, webhook-id: %s skipping\n", github.WebHookType(r), r.Header.Get("X-GitHub-Delivery"))
 		}
+	}
+}
+
+type contextChecker func(repo, context string) bool
+
+func makeContextChecker(cfg map[*regexp.Regexp]*regexp.Regexp) contextChecker {
+	return func(repo, context string) bool {
+		for repoRegexp, contextRegexp := range cfg {
+			if repoRegexp.MatchString(repo) && contextRegexp.MatchString(context) {
+				return true
+			}
+		}
+		return false
 	}
 }
 
@@ -110,12 +129,12 @@ func HookHandler(token []byte, prUp chan<- PullUpdate, cUp chan<- CommitUpdate, 
 //
 // The assumption is that the CI builds everything (branches and PRs). If there are
 // branches that linger around, it's not a problem, because there aren't so many of them.
-func MetricsProcessor(githubContextRegexp *regexp.Regexp) (chan<- PullUpdate, chan<- CommitUpdate, chan<- BranchUpdate) {
+func MetricsProcessor(contextOk contextChecker) (chan<- PullUpdate, chan<- CommitUpdate, chan<- BranchUpdate) {
 	prUp := make(chan PullUpdate)
 	cUp := make(chan CommitUpdate)
 	brUp := make(chan BranchUpdate)
 
-	// Keep track of live SHAs
+	// Keep track of live SHAs -- we don't need separation per repository, as SHAs are pretty unique
 	// map[commitSHA]time
 	liveSHAs := make(map[string]time.Time)
 	// Track when the first notification arrived from the CI
@@ -174,7 +193,7 @@ func MetricsProcessor(githubContextRegexp *regexp.Regexp) (chan<- PullUpdate, ch
 				// and use that
 				log.Printf("updated commit: %s context: %s status: %s", c.SHA, c.Context, c.Status)
 				// We only match certain contexts
-				if !githubContextRegexp.MatchString(c.Context) {
+				if !contextOk(c.Repo, c.Context) {
 					log.Printf("skipping context %s", c.Context)
 					continue
 				}
@@ -220,7 +239,7 @@ func MetricsProcessor(githubContextRegexp *regexp.Regexp) (chan<- PullUpdate, ch
 func main() {
 	log.Println("server started")
 
-	prUp, cUp, brUp := MetricsProcessor(config.Config.GitHubContext)
+	prUp, cUp, brUp := MetricsProcessor(makeContextChecker(config.Config.GitHubContexts))
 	http.HandleFunc("/"+config.Config.WebhookPath, HookHandler(config.Config.WebhookToken, prUp, cUp, brUp))
 	// http.Handle("/metrics", promhttp.Handler())
 
