@@ -216,9 +216,10 @@ func MetricsProcessor(contextOk contextChecker) (chan<- PullUpdate, chan<- Commi
 					break
 				}
 
-				if p.Action == "opened" || p.Action == "reopened" || p.Action == "ready_for_review" {
+				switch p.Action {
+				case "opened", "reopened", "ready_for_review":
 					liveSHAs[p.SHA] = p.Timestamp
-				} else if p.Action == "closed" {
+				case "closed":
 					delete(liveSHAs, p.SHA)
 					if p.Merged {
 						mergeTime := p.Timestamp.Sub(liveSHAs[p.SHA]).Seconds()
@@ -228,17 +229,16 @@ func MetricsProcessor(contextOk contextChecker) (chan<- PullUpdate, chan<- Commi
 				prEvents.With(prometheus.Labels{"repository": p.Repo, "event": p.Action}).Inc()
 			case br := <-brUp:
 				log.Printf("updated a branch to commit: %s (from %s)", br.SHA, br.OldSHA)
-				if br.Created {
+				switch {
+				case br.Created:
 					// we are not interested in created, as it should be handled by the PR creation
 					branchEvents.With(prometheus.Labels{"repository": br.Repo, "event": "created"}).Inc()
-					continue
-				}
-				if br.Deleted {
+				case br.Deleted:
 					// br.SHA would be all 0s, we need OldSHA here
 					log.Printf("Branch is deleted, removing live SHA %s", br.OldSHA)
 					delete(liveSHAs, br.SHA)
 					branchEvents.With(prometheus.Labels{"repository": br.Repo, "event": "deleted"}).Inc()
-				} else {
+				default:
 					// This means the branch was updated
 					log.Printf("Branch is updated, replacing live SHA %s with %s", br.OldSHA, br.SHA)
 					delete(liveSHAs, br.OldSHA)
@@ -252,7 +252,7 @@ func MetricsProcessor(contextOk contextChecker) (chan<- PullUpdate, chan<- Commi
 				log.Printf("updated commit: %s context: %s status: %s", c.SHA, c.Context, c.Status)
 				if _, ok := liveSHAs[c.SHA]; !ok {
 					log.Printf("Could not find the start time for SHA %s, skipping", c.SHA)
-					continue
+					break
 				}
 				switch c.Status {
 				case "pending":
