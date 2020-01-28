@@ -1,0 +1,123 @@
+= Pulley
+
+A service to expose Prometheus metrics of your CI's validation of Pull Requests, using GitHub webhooks.
+
+image::https://github.com/knl/pulley/workflows/CI/badge.svg[CI]
+
+== Why
+
+The best way to have a service level objectives (SLOs) in place is to measure
+the same way the other party is observing. Sometimes your CI is providing you
+metrics, but they are not sufficient or do not match the reality. Pulley uses
+GitHub's webhooks to produce metrics as observed by your developers. That way,
+you can optimize your CI's pipelines in a way it matters.
+
+=== Features
+
+Pulley assumes that a PR is mergeable when a required status check is
+successful. Thus, it lets you configure which status checks to monitor, and only
+treat the PR as validated (mergeable) when that status check is green. Just
+exactly like how developers (or even other automation) observe and act on PRs.
+
+The basic metrics Pulley exposes are (all times are histograms):
+
+- The time it takes for the CI to send the first `pending` status for a PR
+- The time it takes for the CI to send the `success`/`failure`/`error` for the
+  required status check, from the time PR has been open
+- The time it takes for a PR to be merged, since it got open
+- How many PRs have been open/closed
+- How many times branches have been rebased
+
+Pulley can track any repository on GitHub, as long as that repository is configured
+to send https://developer.github.com/webhooks/[webhook events] to it. 
+
+== Usage
+
+Pulley is a service that should run listening on a public IP (as an endpoint is
+needed to be accessible by GitHub's servers). It is completely configurable via
+environment variables.
+
+=== Configuration
+
+Pulley understands the following environment variables:
+
+|===
+| Environment Variable | Description
+
+| APP_HOST
+| The hostname to which Pulley will bind. Defaults to `localhost`.
+
+| APP_PORT
+| The port number to which Pulley will bind. Defaults to `1701`.
+
+| WEBHOOK_PATH
+| URL path on which Pulley receives webhooks. Defaults to an empty string,
+  meaning that webhook events are handled on the root path (that is,
+  `http://$APP_HOST:$APP_PORT/`).
+
+| WEBHOOK_TOKEN
+| A **base64** encoded string representing a secret token, used to validate the
+  events coming from GitHub. Defaults to an empty string. More details on
+  https://developer.github.com/webhooks/securing/.
+
+| METRICS_PATH
+| URL path on which Pulley exposes Prometheus metrics. Defaults to `metricz`.
+
+| GITHUB_CONTEXT_*
+| Set of regular expressions defining contexts to monitor for matching
+  repository names. Defaults to regex `:all-jobs$` matching all repositories
+  (`.*`). For more details, consult the next section.
+
+|===
+
+==== GitHub Contexts
+
+Pulley assumes that each repository has one required status check, which, when
+successfull, enables a PR to be merged.
+
+In order to provide versatility in configuration, while keeping it simple and
+configurable via the environment variables, Pulley resorts to using the
+regular expressions (regexes) and the following scheme for the environment
+variables when encoding that information:
+
+ GITHUB_CONTEXT_$reponame_regex = $status_check_name_regex
+
+That is, the repository name regex is embedded in the variable name, while the
+status check name regex is the value.
+
+The first matching regex on the repository name is used, not all matching
+regexes.
+
+NOTE: Due to the POSIX limitations on the environment variables, one cannot use
+`=` in the repository name regex.
+
+For example, the following configuration:
+
+ GITHUB_CONTEXT_-deployment$=^terraform-validate
+ GITHUB_CONTEXT_^knl/pulley$=build
+
+would check for status checks whose names begin with `terraform-validate` for
+all repositories whose names end with `-deployment`, and check for `build`
+status check on repositories whose names begin with `knl/pulley`. Several things
+are important to note here:
+
+. Repository names are always in the form: `$OWNER/$REPOSITORY`, that is, they
+  represent the repository's full name.
+. When there are multiple matching status check names for a repository, only the
+  first one that shows up will be considered.
+. When there are multiple matching repository names, a random one that matches
+  will be considered.
+
+== Run
+
+Set the environment variables and run:
+
+ ./pulley
+
+The best is to place Pulley behind a reverse proxy (for example, Nginx) that
+terminates HTTPS traffic.
+
+== Requirements
+
+Go version: `1.13`
+
