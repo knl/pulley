@@ -10,7 +10,8 @@ import (
 
 func TestConfigDefaults(t *testing.T) {
 	expected := DefaultConfig()
-	assert.Equal(t, expected, Config)
+	actual := Setup()
+	assert.Equal(t, expected, actual)
 }
 
 func TestChangeDefaults(t *testing.T) {
@@ -22,7 +23,7 @@ func TestChangeDefaults(t *testing.T) {
 	os.Setenv("METRICS_PATH", "metrics")
 	os.Setenv("WEBHOOK_TOKEN", base64.StdEncoding.EncodeToString(zero))
 
-	Setup()
+	actual := Setup()
 
 	expected := DefaultConfig()
 	expected.Host = "::"
@@ -31,5 +32,5 @@ func TestChangeDefaults(t *testing.T) {
 	expected.MetricsPath = "metrics"
 	expected.WebhookToken = zero
 
-	assert.Equal(t, expected, Config)
+	assert.Equal(t, expected, actual)
 }

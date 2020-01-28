@@ -10,21 +10,12 @@ import (
 	"strings"
 )
 
-// Config object for the application
-var (
-	Config *config
-)
-
-func init() {
-	Setup()
-}
-
 type contextDescriptor struct {
 	repo    *regexp.Regexp
 	context *regexp.Regexp
 }
 
-type config struct { // nolint
+type Config struct { // nolint
 	Host           string              // APP_HOST
 	Port           string              // APP_PORT
 	WebhookPath    string              // WEBHOOK_PATH
@@ -35,11 +26,11 @@ type config struct { // nolint
 
 type ContextChecker func(repo, context string) bool
 
-func DefaultContextChecker() ContextChecker {
+func (config *Config) DefaultContextChecker() ContextChecker {
 	return func(repo, context string) bool {
-		for _, entry := range Config.GitHubContexts {
+		for _, entry := range config.GitHubContexts {
 			if entry.repo.MatchString(repo) {
-			  return entry.context.MatchString(context)
+				return entry.context.MatchString(context)
 			}
 		}
 
@@ -97,40 +88,40 @@ func processGithubContexts() []contextDescriptor {
 	return descriptors
 }
 
-func DefaultConfig() *config {
+func DefaultConfig() *Config {
 	var descriptors []contextDescriptor
 	descriptors = append(descriptors, contextDescriptor{
 		repo:    regexp.MustCompile(".*"),
 		context: regexp.MustCompile(":all-jobs$"),
 	})
 
-	return &config{
-		Host: "localhost",
-		Port: "1701",
-		WebhookPath: "",
-		WebhookToken: make([]byte, 0),
+	return &Config{
+		Host:           "localhost",
+		Port:           "1701",
+		WebhookPath:    "",
+		WebhookToken:   make([]byte, 0),
 		GitHubContexts: descriptors,
-		MetricsPath: "metricz",
+		MetricsPath:    "metricz",
 	}
 }
 
 // Setup configurations with environment variables
-func Setup() {
-	Config = DefaultConfig()
+func Setup() *Config {
+	config := DefaultConfig()
 
 	host, ok := os.LookupEnv("APP_HOST")
 	if ok {
-		Config.Host = host
+		config.Host = host
 	}
 
 	port, ok := os.LookupEnv("APP_PORT")
 	if ok {
-		Config.Port = port
+		config.Port = port
 	}
 
 	webhookPath, ok := os.LookupEnv("WEBHOOK_PATH")
 	if ok {
-		Config.WebhookPath = webhookPath
+		config.WebhookPath = webhookPath
 	}
 
 	webhookToken, err := base64.StdEncoding.DecodeString(os.Getenv("WEBHOOK_TOKEN"))
@@ -138,15 +129,17 @@ func Setup() {
 		log.Fatal("Could not decode the webhook secret token from WEBHOOK_TOKEN", err)
 	}
 
-	Config.WebhookToken = webhookToken
+	config.WebhookToken = webhookToken
 
 	metricsPath, ok := os.LookupEnv("METRICS_PATH")
 	if ok {
-		Config.MetricsPath = metricsPath
+		config.MetricsPath = metricsPath
 	}
 
 	githubContexts := processGithubContexts()
 	if len(githubContexts) != 0 {
-		Config.GitHubContexts = githubContexts
+		config.GitHubContexts = githubContexts
 	}
+
+	return config
 }

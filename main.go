@@ -296,12 +296,14 @@ func main() {
 	log.Println("server started")
 	log.Println(version.Print())
 
+	config := config.Setup()
+
 	updates := MetricsProcessor(config.DefaultContextChecker())
-	http.HandleFunc("/"+config.Config.WebhookPath, HookHandler(config.Config.WebhookToken, updates))
-	http.Handle("/"+config.Config.MetricsPath, promhttp.Handler())
+	http.HandleFunc("/"+config.WebhookPath, HookHandler(config.WebhookToken, updates))
+	http.Handle("/"+config.MetricsPath, promhttp.Handler())
 
 	// Listen & Serve
-	addr := net.JoinHostPort(config.Config.Host, config.Config.Port)
+	addr := net.JoinHostPort(config.Host, config.Port)
 	log.Printf("[service] listening on %s", addr)
 
 	log.Fatal(http.ListenAndServe(addr, nil))
