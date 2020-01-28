@@ -281,7 +281,7 @@ func MetricsProcessor(contextOk config.ContextChecker) chan<- interface{} {
 	return updates
 }
 
-func init() {
+func registerMetrics() {
 	// Metrics have to be registered to be exposed:
 	prometheus.MustRegister(prEvents)
 	prometheus.MustRegister(branchRebases)
@@ -295,6 +295,8 @@ func init() {
 func main() {
 	log.Println("server started")
 	log.Println(version.Print())
+
+	registerMetrics()
 
 	config := config.Setup()
 
