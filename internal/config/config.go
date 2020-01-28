@@ -2,7 +2,7 @@ package config
 
 import (
 	"encoding/base64"
-	"log"
+	"fmt"
 	"os"
 	"regexp"
 	"sort"
@@ -38,7 +38,7 @@ func (config *Config) DefaultContextChecker() ContextChecker {
 	}
 }
 
-func processGithubContexts() []contextDescriptor {
+func processGithubContexts() ([]contextDescriptor, error) {
 	// Process all GITHUB_CONTEXT_<int> fields
 	githubContexts := make(map[uint64]contextDescriptor)
 
@@ -47,22 +47,22 @@ func processGithubContexts() []contextDescriptor {
 		if strings.HasPrefix(pair[0], "GITHUB_CONTEXT_") {
 			entryID, err := strconv.ParseUint(strings.TrimPrefix(pair[0], "GITHUB_CONTEXT_"), 10, 64)
 			if err != nil {
-				log.Fatalf("Entry '%s' is not properly formatted, doesn't end with a positive integer, err=%s", pair[0], err)
+				return nil, fmt.Errorf("environment variable '%s' is not properly formatted, doesn't end with a positive integer, err=%v", pair[0], err)
 			}
 
 			descriptor := strings.SplitN(pair[1], "\x1F", 2)
 			if len(descriptor) != 2 {
-				log.Fatalf("Entry '%s' doesn't have two regexes separated by <US>", e)
+				return nil, fmt.Errorf("environment variable '%s' doesn't have two regexes separated by <US>", e)
 			}
 
 			repoRegexp, err := regexp.Compile(descriptor[0])
 			if err != nil {
-				log.Fatalf("Could not compile the repository name regex '%s' passed via %s, err=%s, exiting.", repoRegexp, pair[0], err)
+				return nil, fmt.Errorf("could not compile the repository name regex '%s' passed via %s, err=%v", repoRegexp, pair[0], err)
 			}
 
 			contextRegexp, err := regexp.Compile(descriptor[1])
 			if err != nil {
-				log.Fatalf("Could not compile the status check name regex '%s' passed via %s, err=%s, exiting.", contextRegexp, pair[0], err)
+				return nil, fmt.Errorf("could not compile the status check name regex '%s' passed via %s, err=%v", contextRegexp, pair[0], err)
 			}
 
 			githubContexts[entryID] = contextDescriptor{
@@ -85,7 +85,7 @@ func processGithubContexts() []contextDescriptor {
 		descriptors = append(descriptors, githubContexts[k])
 	}
 
-	return descriptors
+	return descriptors, nil
 }
 
 func DefaultConfig() *Config {
@@ -106,7 +106,7 @@ func DefaultConfig() *Config {
 }
 
 // Setup configurations with environment variables
-func Setup() *Config {
+func Setup() (*Config, error) {
 	config := DefaultConfig()
 
 	host, ok := os.LookupEnv("APP_HOST")
@@ -126,7 +126,7 @@ func Setup() *Config {
 
 	webhookToken, err := base64.StdEncoding.DecodeString(os.Getenv("WEBHOOK_TOKEN"))
 	if err != nil {
-		log.Fatal("Could not decode the webhook secret token from WEBHOOK_TOKEN", err)
+		return nil, fmt.Errorf("could not decode the webhook secret token from WEBHOOK_TOKEN, %v", err)
 	}
 
 	config.WebhookToken = webhookToken
@@ -136,10 +136,14 @@ func Setup() *Config {
 		config.MetricsPath = metricsPath
 	}
 
-	githubContexts := processGithubContexts()
+	githubContexts, err := processGithubContexts()
+	if err != nil {
+		return nil, err
+	}
+
 	if len(githubContexts) != 0 {
 		config.GitHubContexts = githubContexts
 	}
 
-	return config
+	return config, nil
 }

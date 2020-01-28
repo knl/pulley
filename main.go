@@ -319,7 +319,10 @@ func main() {
 
 	registerMetrics()
 
-	config := config.Setup()
+	config, err := config.Setup()
+	if err != nil {
+		log.Fatal("Configuration step failed", err)
+	}
 
 	updates := MetricsProcessor(config.DefaultContextChecker())
 	http.HandleFunc("/"+config.WebhookPath, HookHandler(config.WebhookToken, updates))
