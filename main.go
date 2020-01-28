@@ -96,6 +96,11 @@ type CommitUpdate struct {
 	Timestamp time.Time
 }
 
+type shaState struct {
+	Time      time.Time
+	CheckSeen bool // Set to true if a status check has been received
+}
+
 // HookHandler parses GitHub webhooks and sends an update to MetricsProcessor.
 func HookHandler(token []byte, updates chan<- interface{}) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -175,8 +180,8 @@ func MetricsProcessor(contextOk config.ContextChecker) chan<- interface{} {
 	updates := make(chan interface{}, 100)
 
 	// Keep track of live SHAs -- we don't need separation per repository, as SHAs are pretty unique
-	// map[commitSHA]time
-	liveSHAs := make(map[string]time.Time)
+	// map[commitSHA]shaState
+	liveSHAs := make(map[string]shaState)
 	// Track when the first notification arrived from the CI
 	// prFirstStatusTimes := make(map[int]time.Time)
 	// Track when the PR validation was completed (either success or failure)
@@ -209,12 +214,15 @@ func MetricsProcessor(contextOk config.ContextChecker) chan<- interface{} {
 
 				switch up.Action {
 				case "opened", "reopened", "ready_for_review":
-					liveSHAs[up.SHA] = up.Timestamp
+					liveSHAs[up.SHA] = shaState{
+						Time:      up.Timestamp,
+						CheckSeen: false,
+					}
 				case "closed":
 					delete(liveSHAs, up.SHA)
 
 					if up.Merged {
-						mergeTime := up.Timestamp.Sub(liveSHAs[up.SHA]).Seconds()
+						mergeTime := up.Timestamp.Sub(liveSHAs[up.SHA].Time).Seconds()
 						prMergeTime.With(prometheus.Labels{"repository": up.Repo}).Observe(mergeTime)
 					}
 				}
@@ -239,7 +247,10 @@ func MetricsProcessor(contextOk config.ContextChecker) chan<- interface{} {
 					log.Printf("Branch is updated, replacing live SHA %s with %s", up.OldSHA, up.SHA)
 
 					delete(liveSHAs, up.OldSHA)
-					liveSHAs[up.SHA] = up.Timestamp
+					liveSHAs[up.SHA] = shaState{
+						Time:      up.Timestamp,
+						CheckSeen: false,
+					}
 
 					branchRebases.With(prometheus.Labels{"repository": up.Repo}).Inc()
 				}
@@ -249,16 +260,26 @@ func MetricsProcessor(contextOk config.ContextChecker) chan<- interface{} {
 				// and use that
 				log.Printf("updated commit: %s context: %s status: %s", up.SHA, up.Context, up.Status)
 
-				if _, ok := liveSHAs[up.SHA]; !ok {
+				state, ok := liveSHAs[up.SHA]
+				if !ok {
 					log.Printf("Could not find the start time for SHA %s, skipping", up.SHA)
 					break
 				}
 
 				switch up.Status {
 				case "pending":
-					log.Printf("CI Start time for SHA %s is %s", up.SHA, up.Timestamp.Sub(liveSHAs[up.SHA]))
-					startTime := up.Timestamp.Sub(liveSHAs[up.SHA]).Seconds()
-					prStartTime.With(prometheus.Labels{"repository": up.Repo}).Observe(startTime)
+					if state.CheckSeen {
+						log.Printf("Received a 'pending' check already for SHA %s, skipping", up.SHA)
+						break
+					}
+
+					state.CheckSeen = true
+					liveSHAs[up.SHA] = state
+
+					startTime := up.Timestamp.Sub(state.Time)
+					log.Printf("CI Start time for SHA %s is %s", up.SHA, startTime)
+					prStartTime.With(prometheus.Labels{"repository": up.Repo}).Observe(startTime.Seconds())
+
 				case "success", "failure", "error":
 					// We only match certain contexts here
 					// Not done for pending, as there we want to observe the very first check
@@ -267,9 +288,9 @@ func MetricsProcessor(contextOk config.ContextChecker) chan<- interface{} {
 						break
 					}
 
-					log.Printf("Validation time for SHA %s is %s with status %s", up.SHA, up.Timestamp.Sub(liveSHAs[up.SHA]), up.Status)
-					validationTime := up.Timestamp.Sub(liveSHAs[up.SHA]).Seconds()
-					prValidationTime.With(prometheus.Labels{"repository": up.Repo, "status": up.Status}).Observe(validationTime)
+					validationTime := up.Timestamp.Sub(liveSHAs[up.SHA].Time)
+					log.Printf("Validation time for SHA %s is %s with status %s", up.SHA, validationTime, up.Status)
+					prValidationTime.With(prometheus.Labels{"repository": up.Repo, "status": up.Status}).Observe(validationTime.Seconds())
 
 				default:
 					log.Printf("Unknown status type %s", up.Status)
