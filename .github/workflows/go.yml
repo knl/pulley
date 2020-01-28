@@ -64,6 +64,5 @@ jobs:
       - name: Build
         env:
           GOPROXY: "https://proxy.golang.org"
-        run: |
-          go build -o dist/pulley .
-          
+        run: ./build.sh ${{ github.sha }} ${{ github.ref }} ${{ github.actor }}
+

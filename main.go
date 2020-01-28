@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/knl/pulley/internal/config"
+	"github.com/knl/pulley/internal/version"
 )
 
 // https://godoc.org/github.com/prometheus/client_golang/prometheus
@@ -288,10 +289,12 @@ func init() {
 	prometheus.MustRegister(prValidationTime)
 	prometheus.MustRegister(prStartTime)
 	prometheus.MustRegister(prMergeTime)
+	prometheus.MustRegister(version.NewCollector())
 }
 
 func main() {
 	log.Println("server started")
+	log.Println(version.Print())
 
 	updates := MetricsProcessor(config.DefaultContextChecker())
 	http.HandleFunc("/"+config.Config.WebhookPath, HookHandler(config.Config.WebhookToken, updates))
