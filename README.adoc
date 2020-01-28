@@ -63,7 +63,7 @@ Pulley understands the following environment variables:
 | METRICS_PATH
 | URL path on which Pulley exposes Prometheus metrics. Defaults to `metricz`.
 
-| GITHUB_CONTEXT_*
+| GITHUB_CONTEXT_<int>
 | Set of regular expressions defining contexts to monitor for matching
   repository names. Defaults to regex `:all-jobs$` matching all repositories
   (`.*`). For more details, consult the next section.
@@ -80,33 +80,39 @@ configurable via the environment variables, Pulley resorts to using the
 regular expressions (regexes) and the following scheme for the environment
 variables when encoding that information:
 
- GITHUB_CONTEXT_$reponame_regex = $status_check_name_regex
+ GITHUB_CONTEXT_<int> = $repo_name_regex <US> $status_check_name_regex
 
-That is, the repository name regex is embedded in the variable name, while the
-status check name regex is the value.
+That is, we mimic a prioritized list of regexes to match between the the
+repository name and the status check name.
 
-The first matching regex on the repository name is used, not all matching
-regexes.
+NOTE: `<US>` is an unit separator character (ASCII code `0x1F`, octal `037`) and
+separates two regexes. To embed `<US>` in a shell, use `printf`, as in:
 
-NOTE: Due to the POSIX limitations on the environment variables, one cannot use
-`=` in the repository name regex.
+ printf "%s\x1F%s" "$repo_name_regex" "$status_check_name_regex"
+
+The list of regexes is processed in order from the smallest number towards the
+highest. If there is a match on the repository name, but not on the status, the
+search will **NOT** continue.
 
 For example, the following configuration:
 
- GITHUB_CONTEXT_-deployment$=^terraform-validate
- GITHUB_CONTEXT_^knl/pulley$=build
+ GITHUB_CONTEXT_0=-deployment$<US>^terraform-validate
+ GITHUB_CONTEXT_1=^knl/pulley$<US>build
+ GITHUB_CONTEXT_100=.*<US>:all-jobs$
 
 would check for status checks whose names begin with `terraform-validate` for
-all repositories whose names end with `-deployment`, and check for `build`
-status check on repositories whose names begin with `knl/pulley`. Several things
-are important to note here:
+all repositories whose names end with `-deployment`. Then it would check for
+`build` status check on repositories whose names begin with `knl/pulley`.
+Finally, it would default (due to `.*` regex on the repository name) to status
+check whose name ends with `:all-jobs` for all other repositories.
+
+Several things are important to note here:
 
 . Repository names are always in the form: `$OWNER/$REPOSITORY`, that is, they
   represent the repository's full name.
+. The first entry that matches the repository name is considered only.
 . When there are multiple matching status check names for a repository, only the
   first one that shows up will be considered.
-. When there are multiple matching repository names, a random one that matches
-  will be considered.
 
 == Run
 
