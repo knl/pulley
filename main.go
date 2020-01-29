@@ -1,6 +1,3 @@
-/*
-HookHandler - listen for github webhooks, sending updates on channel.
-*/
 package main
 
 import (
@@ -126,8 +123,7 @@ func HookHandler(token []byte, updates chan<- interface{}) http.HandlerFunc {
 			return
 		}
 
-		// send PR or Branch updates to the MetricsProcessor
-		// send commit status (from CircleCI) to the MetricsProcessor
+		// send PR, Branch, and Commit updates to the MetricsProcessor
 		switch e := event.(type) {
 		case *github.PullRequestEvent:
 			updates <- PullUpdate{
@@ -182,12 +178,6 @@ func MetricsProcessor(contextOk config.ContextChecker) chan<- interface{} {
 	// Keep track of live SHAs -- we don't need separation per repository, as SHAs are pretty unique
 	// map[commitSHA]shaState
 	liveSHAs := make(map[string]shaState)
-	// Track when the first notification arrived from the CI
-	// prFirstStatusTimes := make(map[int]time.Time)
-	// Track when the PR validation was completed (either success or failure)
-	// prValidationTimes := make(map[int]time.Time)
-	// Track when the PR was merged
-	// prMergeTimes := make(map[int]time.Time)
 
 	// Possible values for PR actions are:
 	// "assigned", "unassigned", "review_requested", "review_request_removed", "labeled", "unlabeled",
