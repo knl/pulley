@@ -55,6 +55,10 @@ func processGithubContexts() ([]contextDescriptor, error) {
 				return nil, fmt.Errorf("environment variable '%s' doesn't have two regexes separated by <US>", e)
 			}
 
+			if len(descriptor[0]) == 0 || len(descriptor[1]) == 0 {
+				return nil, fmt.Errorf("environment variable '%s' misses one (or both) regexes", e)
+			}
+
 			repoRegexp, err := regexp.Compile(descriptor[0])
 			if err != nil {
 				return nil, fmt.Errorf("could not compile the repository name regex '%s' passed via %s, err=%v", repoRegexp, pair[0], err)
