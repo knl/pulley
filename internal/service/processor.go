@@ -65,12 +65,17 @@ func MetricsProcessor(contextOk config.ContextChecker, publisher metrics.Publish
 						CheckSeen: false,
 					}
 				case events.Closed:
-					delete(liveSHAs, up.SHA)
+					if _, ok := liveSHAs[up.SHA]; !ok {
+						log.Printf("%s is not in live SHAs, skipping.", up.SHA)
+						break
+					}
 
 					if up.Merged {
 						mergeTime := up.Timestamp.Sub(liveSHAs[up.SHA].Time).Seconds()
 						publisher.RegisterMerge(up.Repo, mergeTime)
 					}
+
+					delete(liveSHAs, up.SHA)
 				}
 
 				publisher.RegisterPREvent(up.Repo, up.Action)
