@@ -10,8 +10,10 @@ import (
 )
 
 type shaState struct {
-	Time      time.Time
-	CheckSeen bool // Set to true if a status check has been received
+	Time        time.Time
+	CheckSeen   bool                 // Set to true if a status check has been received
+	CIStart     time.Time            // Time when we received the first CI notification (CheckSeen == true)
+	BuildStarts map[string]time.Time // when a build started
 }
 
 type liveSHAMap = map[string]*shaState
@@ -20,6 +22,8 @@ func newShaState(timestamp time.Time) *shaState {
 	return &shaState{
 		Time:        timestamp,
 		CheckSeen:   false,
+		CIStart:     timestamp, // not necessarily correct
+		BuildStarts: make(map[string]time.Time),
 	}
 }
 
@@ -81,29 +85,40 @@ func processCommitUpdate(up events.CommitUpdate, liveSHAs *liveSHAMap, publisher
 
 	switch up.Status {
 	case events.Pending:
-		if state.CheckSeen {
-			log.Printf("Received a 'pending' check already for SHA %s, skipping", up.SHA)
-			break
+		// got the very first status check for this SHA
+		if !state.CheckSeen {
+			startTime := up.Timestamp.Sub(state.Time)
+			log.Printf("CI Start time for SHA %s is %s", up.SHA, startTime)
+			publisher.RegisterStart(up.Repo, startTime.Seconds())
 		}
 
 		// This will be propagated to liveSHAs
 		state.CheckSeen = true
+		state.CIStart = up.Timestamp
 
-		startTime := up.Timestamp.Sub(state.Time)
-		log.Printf("CI Start time for SHA %s is %s", up.SHA, startTime)
-		publisher.RegisterStart(up.Repo, startTime.Seconds())
+		// Track individual builds
+		(*liveSHAs)[up.SHA].BuildStarts[up.Context] = up.Timestamp
 
 	case events.Success, events.Failure, events.Error:
-		// We only match certain contexts here
-		// Not done for pending, as there we want to observe the very first check
-		if !contextOk(up.Repo, up.Context) {
-			log.Printf("skipping context %s", up.Context)
-			break
+		// Validation time is per PR, so only matters for the right context
+		if contextOk(up.Repo, up.Context) {
+			validationTime := up.Timestamp.Sub(state.Time)
+			log.Printf("Validation time for SHA %s is %s with status %s", up.SHA, validationTime, up.Status)
+			publisher.RegisterValidation(up.Repo, up.Status, validationTime.Seconds())
 		}
 
-		validationTime := up.Timestamp.Sub((*liveSHAs)[up.SHA].Time)
-		log.Printf("Validation time for SHA %s is %s with status %s", up.SHA, validationTime, up.Status)
-		publisher.RegisterValidation(up.Repo, up.Status, validationTime.Seconds())
+		// Track individual builds. Work around the fact that sometimes we might
+		// have not received the 'pending' for a build. Then, take the CIStart time
+		// as a good approximation
+		buildStart, ok := (*liveSHAs)[up.SHA].BuildStarts[up.Context]
+		if !ok {
+			buildStart = state.CIStart
+
+			publisher.RegisterMissedPending(up.Repo)
+		}
+
+		buildTime := up.Timestamp.Sub(buildStart)
+		publisher.RegisterBuildDone(up.Repo, up.Context, up.Status, buildTime.Seconds())
 
 	default:
 		log.Printf("Unknown status type %s", up.Status)
