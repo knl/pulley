@@ -16,12 +16,13 @@ type contextDescriptor struct {
 }
 
 type Config struct { // nolint
-	Host           string              // APP_HOST
-	Port           string              // APP_PORT
-	WebhookPath    string              // WEBHOOK_PATH
-	WebhookToken   []byte              // WEBHOOK_TOKEN
-	GitHubContexts []contextDescriptor // GITHUB_CONTEXT_<int> = repo_regex <RS> regex
-	MetricsPath    string              // METRICS_PATH
+	Host            string              // APP_HOST
+	Port            string              // APP_PORT
+	WebhookPath     string              // WEBHOOK_PATH
+	WebhookToken    []byte              // WEBHOOK_TOKEN
+	GitHubContexts  []contextDescriptor // GITHUB_CONTEXT_<int> = repo_regex <RS> regex
+	MetricsPath     string              // METRICS_PATH
+	TrackBuildTimes bool                // TRACK_BUILD_TIMES
 }
 
 type ContextChecker func(repo, context string) bool
@@ -100,12 +101,13 @@ func DefaultConfig() *Config {
 	})
 
 	return &Config{
-		Host:           "localhost",
-		Port:           "1701",
-		WebhookPath:    "",
-		WebhookToken:   make([]byte, 0),
-		GitHubContexts: descriptors,
-		MetricsPath:    "metricz",
+		Host:            "localhost",
+		Port:            "1701",
+		WebhookPath:     "",
+		WebhookToken:    make([]byte, 0),
+		GitHubContexts:  descriptors,
+		MetricsPath:     "metricz",
+		TrackBuildTimes: false,
 	}
 }
 
@@ -147,6 +149,10 @@ func Setup() (*Config, error) {
 
 	if len(githubContexts) != 0 {
 		config.GitHubContexts = githubContexts
+	}
+
+	if b, err := strconv.ParseBool(os.Getenv("TRACK_BUILD_TIMES")); err == nil {
+		config.TrackBuildTimes = b
 	}
 
 	return config, nil

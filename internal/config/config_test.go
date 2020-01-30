@@ -29,6 +29,7 @@ func TestChangeDefaults(t *testing.T) {
 	os.Setenv("WEBHOOK_PATH", "webhooks")
 	os.Setenv("METRICS_PATH", "metrics")
 	os.Setenv("WEBHOOK_TOKEN", base64.StdEncoding.EncodeToString(zero))
+	os.Setenv("TRACK_BUILD_TIMES", "true")
 
 	actual, err := Setup()
 	assert.NoError(t, err)
@@ -39,6 +40,7 @@ func TestChangeDefaults(t *testing.T) {
 	expected.WebhookPath = "webhooks"
 	expected.MetricsPath = "metrics"
 	expected.WebhookToken = zero
+	expected.TrackBuildTimes = true
 
 	assert.Equal(t, expected, actual)
 }

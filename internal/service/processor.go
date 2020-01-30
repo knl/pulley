@@ -74,7 +74,7 @@ func processBranchUpdate(up events.BranchUpdate, liveSHAs *liveSHAMap, publisher
 	publisher.RegisterBranchEvent(up.Repo, up.Action)
 }
 
-func processCommitUpdate(up events.CommitUpdate, liveSHAs *liveSHAMap, publisher metrics.Publisher, contextOk config.ContextChecker) {
+func processCommitUpdate(up events.CommitUpdate, liveSHAs *liveSHAMap, publisher metrics.Publisher, contextOk config.ContextChecker, trackBuildTimes bool) {
 	publisher.RegisterStatusCheck(up.Repo, up.Status)
 
 	state, ok := (*liveSHAs)[up.SHA]
@@ -97,7 +97,9 @@ func processCommitUpdate(up events.CommitUpdate, liveSHAs *liveSHAMap, publisher
 		state.CIStart = up.Timestamp
 
 		// Track individual builds
-		(*liveSHAs)[up.SHA].BuildStarts[up.Context] = up.Timestamp
+		if trackBuildTimes {
+			(*liveSHAs)[up.SHA].BuildStarts[up.Context] = up.Timestamp
+		}
 
 	case events.Success, events.Failure, events.Error:
 		// Validation time is per PR, so only matters for the right context
@@ -110,15 +112,17 @@ func processCommitUpdate(up events.CommitUpdate, liveSHAs *liveSHAMap, publisher
 		// Track individual builds. Work around the fact that sometimes we might
 		// have not received the 'pending' for a build. Then, take the CIStart time
 		// as a good approximation
-		buildStart, ok := (*liveSHAs)[up.SHA].BuildStarts[up.Context]
-		if !ok {
-			buildStart = state.CIStart
+		if trackBuildTimes {
+			buildStart, ok := (*liveSHAs)[up.SHA].BuildStarts[up.Context]
+			if !ok {
+				buildStart = state.CIStart
 
-			publisher.RegisterMissedPending(up.Repo)
+				publisher.RegisterMissedPending(up.Repo)
+			}
+
+			buildTime := up.Timestamp.Sub(buildStart)
+			publisher.RegisterBuildDone(up.Repo, up.Context, up.Status, buildTime.Seconds())
 		}
-
-		buildTime := up.Timestamp.Sub(buildStart)
-		publisher.RegisterBuildDone(up.Repo, up.Context, up.Status, buildTime.Seconds())
 
 	default:
 		log.Printf("Unknown status type %s", up.Status)
@@ -139,7 +143,7 @@ func processCommitUpdate(up events.CommitUpdate, liveSHAs *liveSHAMap, publisher
 //
 // The assumption is that the CI builds everything (branches and PRs). If there are
 // branches that linger around, it's not a problem, because there aren't so many of them.
-func MetricsProcessor(contextOk config.ContextChecker, publisher metrics.Publisher) chan<- interface{} {
+func MetricsProcessor(contextOk config.ContextChecker, trackBuildTimes bool, publisher metrics.Publisher) chan<- interface{} {
 	updates := make(chan interface{}, 100)
 
 	// Keep track of live SHAs -- we don't need separation per repository, as SHAs are pretty unique
@@ -166,7 +170,7 @@ func MetricsProcessor(contextOk config.ContextChecker, publisher metrics.Publish
 				// and use that
 				log.Printf("updated commit: %s context: %s status: %s", up.SHA, up.Context, up.Status)
 
-				processCommitUpdate(up, &liveSHAs, publisher, contextOk)
+				processCommitUpdate(up, &liveSHAs, publisher, contextOk, trackBuildTimes)
 			}
 		}
 	}()
