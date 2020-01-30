@@ -1,13 +1,14 @@
 = Pulley
 
-A service to expose Prometheus metrics of your CI's validation of Pull Requests, using GitHub webhooks.
+A service to expose Prometheus metrics of your CI's validation of Pull Requests
+(PRs), using GitHub webhooks.
 
 image::https://github.com/knl/pulley/workflows/CI/badge.svg[CI]
 
 == Why
 
-The best way to have a service level objectives (SLOs) in place is to measure
-the same way the other party is observing. Sometimes your CI is providing you
+The best way to have service level objectives (SLOs) in place is to measure the
+same way the other party is observing. Sometimes your CI is providing you
 metrics, but they are not sufficient or do not match the reality. Pulley uses
 GitHub's webhooks to produce metrics as observed by your developers. That way,
 you can optimize your CI's pipelines in a way it matters.
@@ -24,12 +25,12 @@ The basic metrics Pulley exposes are (all times are histograms):
 - The time it takes for the CI to send the first `pending` status for a PR
 - The time it takes for the CI to send the `success`/`failure`/`error` for the
   required status check, from the time PR has been open
-- The time it takes for a PR to be merged, since it got open
+- The time it takes for a PR to be merged since it got open
 - How many PRs have been open/closed
 - How many times branches have been rebased
 
-Pulley can track any repository on GitHub, as long as that repository is configured
-to send https://developer.github.com/webhooks/[webhook events] to it. 
+Pulley can track any repository on GitHub, as long as that repository is
+configured to send https://developer.github.com/webhooks/[webhook events] to it.
 
 == Usage
 
@@ -73,17 +74,17 @@ Pulley understands the following environment variables:
 ==== GitHub Contexts
 
 Pulley assumes that each repository has one required status check, which, when
-successfull, enables a PR to be merged.
+successful enables a PR to be merged.
 
-In order to provide versatility in configuration, while keeping it simple and
-configurable via the environment variables, Pulley resorts to using the
-regular expressions (regexes) and the following scheme for the environment
-variables when encoding that information:
+To provide versatility in configuration, while keeping it simple and
+configurable via the environment variables, Pulley resorts to using the regular
+expressions (regexes) and the following scheme for the environment variables
+when encoding that information:
 
  GITHUB_CONTEXT_<int> = $repo_name_regex <US> $status_check_name_regex
 
-That is, we mimic a prioritized list of regexes to match between the the
-repository name and the status check name.
+That is, we mimic a prioritized list of regexes to match between the repository
+name and the status check name.
 
 NOTE: `<US>` is an unit separator character (ASCII code `0x1F`, octal `037`) and
 separates two regexes. To embed `<US>` in a shell, use `printf`, as in:
