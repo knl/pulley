@@ -26,8 +26,12 @@ The basic metrics Pulley exposes are (all times are histograms):
 - The time it takes for the CI to send the `success`/`failure`/`error` for the
   required status check, from the time PR has been open
 - The time it takes for a PR to be merged since it got open
+- The build duration on the CI, per build
 - How many PRs have been open/closed
 - How many times branches have been rebased
+- The total number of status checks received
+- The total number of `success`/`failure`/`error` status checks received,
+  without a preceding `pending` status check
 
 Pulley can track any repository on GitHub, as long as that repository is
 configured to send https://developer.github.com/webhooks/[webhook events] to it.
