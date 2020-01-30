@@ -14,7 +14,14 @@ type shaState struct {
 	CheckSeen bool // Set to true if a status check has been received
 }
 
-type liveSHAMap = map[string]shaState
+type liveSHAMap = map[string]*shaState
+
+func newShaState(timestamp time.Time) *shaState {
+	return &shaState{
+		Time:        timestamp,
+		CheckSeen:   false,
+	}
+}
 
 func processPullUpdate(up events.PullUpdate, liveSHAs *liveSHAMap, publisher metrics.Publisher) {
 	// Possible values for PR actions are:
@@ -22,10 +29,8 @@ func processPullUpdate(up events.PullUpdate, liveSHAs *liveSHAMap, publisher met
 	// "opened", "edited", "closed", "ready_for_review", "locked", "unlocked", or "reopened".
 	switch up.Action {
 	case events.Opened, events.Reopened, events.ReadyForReview:
-		(*liveSHAs)[up.SHA] = shaState{
-			Time:      up.Timestamp,
-			CheckSeen: false,
-		}
+		(*liveSHAs)[up.SHA] = newShaState(up.Timestamp)
+
 	case events.Closed:
 		if _, ok := (*liveSHAs)[up.SHA]; !ok {
 			log.Printf("%s is not in live SHAs, skipping.", up.SHA)
@@ -59,10 +64,7 @@ func processBranchUpdate(up events.BranchUpdate, liveSHAs *liveSHAMap, publisher
 		log.Printf("Branch is updated, replacing live SHA %s with %s", up.OldSHA, up.SHA)
 
 		delete(*liveSHAs, up.OldSHA)
-		(*liveSHAs)[up.SHA] = shaState{
-			Time:      up.Timestamp,
-			CheckSeen: false,
-		}
+		(*liveSHAs)[up.SHA] = newShaState(up.Timestamp)
 	}
 
 	publisher.RegisterBranchEvent(up.Repo, up.Action)
@@ -84,8 +86,8 @@ func processCommitUpdate(up events.CommitUpdate, liveSHAs *liveSHAMap, publisher
 			break
 		}
 
+		// This will be propagated to liveSHAs
 		state.CheckSeen = true
-		(*liveSHAs)[up.SHA] = state
 
 		startTime := up.Timestamp.Sub(state.Time)
 		log.Printf("CI Start time for SHA %s is %s", up.SHA, startTime)
