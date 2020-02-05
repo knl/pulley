@@ -22,10 +22,15 @@ func main() {
 		log.Fatal("Configuration step failed", err)
 	}
 
-	metrics := metrics.NewGithubMetrics()
-	updates := service.MetricsProcessor(config.DefaultContextChecker(), config.TrackBuildTimes, metrics)
+	pulley := service.Pulley{
+		Updates: make(chan interface{}, 100),
+		Metrics: metrics.NewGithubMetrics(),
+		Token:   config.WebhookToken,
+	}
 
-	http.HandleFunc("/"+config.WebhookPath, service.HookHandler(config.WebhookToken, updates))
+	pulley.MetricsProcessor(config.DefaultContextChecker(), config.TrackBuildTimes)
+
+	http.HandleFunc("/"+config.WebhookPath, pulley.HookHandler())
 	http.Handle("/"+config.MetricsPath, promhttp.Handler())
 
 	// Listen & Serve

@@ -10,14 +10,14 @@ import (
 )
 
 // HookHandler parses GitHub webhooks and sends an update to MetricsProcessor.
-func HookHandler(token []byte, updates chan<- interface{}) http.HandlerFunc {
+func (p *Pulley) HookHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(405) // Return 405 Method Not Allowed.
 			return
 		}
 
-		payload, err := github.ValidatePayload(r, token)
+		payload, err := github.ValidatePayload(r, p.Token)
 		if err != nil {
 			log.Printf("error reading request body: err=%s\n", err)
 			w.WriteHeader(400) // Return 400 Bad Request.
@@ -43,7 +43,7 @@ func HookHandler(token []byte, updates chan<- interface{}) http.HandlerFunc {
 				log.Printf("Skipping Pull Request Event, due to %v", err)
 				break
 			}
-			updates <- events.PullUpdate{
+			p.Updates <- events.PullUpdate{
 				Number:    *e.Number,
 				SHA:       *e.PullRequest.Head.SHA,
 				Action:    action,
@@ -64,7 +64,7 @@ func HookHandler(token []byte, updates chan<- interface{}) http.HandlerFunc {
 				log.Printf("Weird state where branch is both created and deleted, skipping.")
 				break LOOP
 			}
-			updates <- events.BranchUpdate{
+			p.Updates <- events.BranchUpdate{
 				SHA:       *e.After,
 				OldSHA:    *e.Before,
 				Action:    action,
@@ -77,7 +77,7 @@ func HookHandler(token []byte, updates chan<- interface{}) http.HandlerFunc {
 				log.Printf("Skipping a status event, due to: %v", err)
 				break
 			}
-			updates <- events.CommitUpdate{
+			p.Updates <- events.CommitUpdate{
 				Status:    status,
 				Context:   *e.Context,
 				SHA:       *e.SHA,

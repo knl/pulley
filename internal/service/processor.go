@@ -143,26 +143,24 @@ func processCommitUpdate(up events.CommitUpdate, liveSHAs *liveSHAMap, publisher
 //
 // The assumption is that the CI builds everything (branches and PRs). If there are
 // branches that linger around, it's not a problem, because there aren't so many of them.
-func MetricsProcessor(contextOk config.ContextChecker, trackBuildTimes bool, publisher metrics.Publisher) chan<- interface{} {
-	updates := make(chan interface{}, 100)
-
+func (p *Pulley) MetricsProcessor(contextOk config.ContextChecker, trackBuildTimes bool) {
 	// Keep track of live SHAs -- we don't need separation per repository, as SHAs are pretty unique
 	// map[commitSHA]shaState
 	liveSHAs := make(liveSHAMap)
 
-	go func() {
+	go func(updates <-chan interface{}) {
 		for update := range updates {
 			switch up := update.(type) {
 			case events.PullUpdate:
 				// When a PR is opened, its tracking starts.
 				log.Printf("updated pr: %d to commit: %s, action=%s\n", up.Number, up.SHA, up.Action)
 
-				processPullUpdate(up, &liveSHAs, publisher)
+				processPullUpdate(up, &liveSHAs, p.Metrics)
 
 			case events.BranchUpdate:
 				log.Printf("updated a branch to commit: %s (from %s)", up.SHA, up.OldSHA)
 
-				processBranchUpdate(up, &liveSHAs, publisher)
+				processBranchUpdate(up, &liveSHAs, p.Metrics)
 
 			case events.CommitUpdate:
 				// track good, bad, overall
@@ -170,10 +168,8 @@ func MetricsProcessor(contextOk config.ContextChecker, trackBuildTimes bool, pub
 				// and use that
 				log.Printf("updated commit: %s context: %s status: %s", up.SHA, up.Context, up.Status)
 
-				processCommitUpdate(up, &liveSHAs, publisher, contextOk, trackBuildTimes)
+				processCommitUpdate(up, &liveSHAs, p.Metrics, contextOk, trackBuildTimes)
 			}
 		}
-	}()
-
-	return updates
+	}(p.Updates)
 }
