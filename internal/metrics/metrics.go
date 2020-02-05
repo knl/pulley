@@ -20,7 +20,7 @@ type GithubMetrics struct {
 }
 
 func NewGithubMetrics() *GithubMetrics {
-	return &GithubMetrics{
+	metrics := &GithubMetrics{
 		PREvents: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "github_pull_request_events_total",
 			Help: "The number of Pull Request events",
@@ -82,10 +82,21 @@ func NewGithubMetrics() *GithubMetrics {
 			[]string{"repository", "build", "status"},
 		),
 	}
+
+	prometheus.MustRegister(metrics.PREvents)
+	prometheus.MustRegister(metrics.BranchEvents)
+	prometheus.MustRegister(metrics.StatusChecks)
+	prometheus.MustRegister(metrics.MissedPendings)
+	prometheus.MustRegister(metrics.CINoticedDuration)
+	prometheus.MustRegister(metrics.PRValidatedDuration)
+	prometheus.MustRegister(metrics.PRMergedDuration)
+	prometheus.MustRegister(metrics.BuildDuration)
+	prometheus.MustRegister(version.NewCollector())
+
+	return metrics
 }
 
 type Publisher interface {
-	Setup()
 	RegisterMerge(repository string, durationSeconds float64)
 	RegisterStart(repository string, durationSeconds float64)
 	RegisterValidation(repository string, status events.Status, durationSeconds float64)
@@ -94,18 +105,6 @@ type Publisher interface {
 	RegisterBranchEvent(repository string, event events.BranchEvent)
 	RegisterStatusCheck(repository string, state events.Status)
 	RegisterMissedPending(repository string)
-}
-
-func (m *GithubMetrics) Setup() {
-	prometheus.MustRegister(m.PREvents)
-	prometheus.MustRegister(m.BranchEvents)
-	prometheus.MustRegister(m.StatusChecks)
-	prometheus.MustRegister(m.MissedPendings)
-	prometheus.MustRegister(m.CINoticedDuration)
-	prometheus.MustRegister(m.PRValidatedDuration)
-	prometheus.MustRegister(m.PRMergedDuration)
-	prometheus.MustRegister(m.BuildDuration)
-	prometheus.MustRegister(version.NewCollector())
 }
 
 func (m *GithubMetrics) RegisterMerge(repository string, durationSeconds float64) {

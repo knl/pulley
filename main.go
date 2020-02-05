@@ -25,7 +25,6 @@ func main() {
 	metrics := metrics.NewGithubMetrics()
 	updates := service.MetricsProcessor(config.DefaultContextChecker(), config.TrackBuildTimes, metrics)
 
-	metrics.Setup()
 	http.HandleFunc("/"+config.WebhookPath, service.HookHandler(config.WebhookToken, updates))
 	http.Handle("/"+config.MetricsPath, promhttp.Handler())
 
