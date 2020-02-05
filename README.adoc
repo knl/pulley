@@ -132,3 +132,18 @@ terminates HTTPS traffic.
 
 Go version: `1.13`
 
+== Development
+
+To build the code, simply run:
+
+ make build
+
+Similarly, the tests are executed via:
+
+ make test
+
+Prior to committing the code, you could run
+
+ make
+
+to properly format and lint the code
