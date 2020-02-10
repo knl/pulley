@@ -129,36 +129,6 @@ func processCommitUpdate(up events.CommitUpdate, liveSHAs *liveSHAMap, publisher
 	}
 }
 
-type looper struct {
-	pulley          *Pulley
-	contextOk       config.ContextChecker
-	trackBuildTimes bool
-	liveSHAs        *liveSHAMap
-}
-
-func (l looper) eventLoop(update interface{}) {
-	switch up := update.(type) {
-	case events.PullUpdate:
-		// When a PR is opened, its tracking starts.
-		log.Printf("updated pr: %d to commit: %s, action=%s\n", up.Number, up.SHA, up.Action)
-
-		processPullUpdate(up, l.liveSHAs, l.pulley.Metrics)
-
-	case events.BranchUpdate:
-		log.Printf("updated a branch to commit: %s (from %s)", up.SHA, up.OldSHA)
-
-		processBranchUpdate(up, l.liveSHAs, l.pulley.Metrics)
-
-	case events.CommitUpdate:
-		// track good, bad, overall
-		// Find which PRs are the ones with the status as the HEAD
-		// and use that
-		log.Printf("updated commit: %s context: %s status: %s", up.SHA, up.Context, up.Status)
-
-		processCommitUpdate(up, l.liveSHAs, l.pulley.Metrics, l.contextOk, l.trackBuildTimes)
-	}
-}
-
 // MetricsProcessor receives updates when
 // - a pull request is opened/updated/closed
 // - a branch receives a new push (merge to master is a push event)
@@ -178,16 +148,32 @@ func (p *Pulley) MetricsProcessor(contextOk config.ContextChecker, trackBuildTim
 	// map[commitSHA]shaState
 	liveSHAs := make(liveSHAMap)
 
-	go func() {
-		l := looper{
-			pulley:          p,
-			contextOk:       contextOk,
-			trackBuildTimes: trackBuildTimes,
-			liveSHAs:        &liveSHAs,
-		}
+	p.WG.Add(1)
 
-		for update := range p.Updates {
-			l.eventLoop(update)
+	go func(updates <-chan interface{}) {
+		defer p.WG.Done()
+
+		for update := range updates {
+			switch up := update.(type) {
+			case events.PullUpdate:
+				// When a PR is opened, its tracking starts.
+				log.Printf("updated pr: %d to commit: %s, action=%s\n", up.Number, up.SHA, up.Action)
+
+				processPullUpdate(up, &liveSHAs, p.Metrics)
+
+			case events.BranchUpdate:
+				log.Printf("updated a branch to commit: %s (from %s)", up.SHA, up.OldSHA)
+
+				processBranchUpdate(up, &liveSHAs, p.Metrics)
+
+			case events.CommitUpdate:
+				// track good, bad, overall
+				// Find which PRs are the ones with the status as the HEAD
+				// and use that
+				log.Printf("updated commit: %s context: %s status: %s", up.SHA, up.Context, up.Status)
+
+				processCommitUpdate(up, &liveSHAs, p.Metrics, contextOk, trackBuildTimes)
+			}
 		}
-	}()
+	}(p.Updates)
 }
