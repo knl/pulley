@@ -17,3 +17,11 @@ linters:
    - unused
    - complexity
    - style
+
+issues:
+  exclude-rules:
+    # Exclude gosec on test files
+    - path: internal/test/
+      text: "G404"
+      linters:
+        - gosec
