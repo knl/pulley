@@ -1,0 +1,37 @@
+project_name: pulley
+
+before:
+  hooks:
+    - go mod download
+    - go mod tidy -v
+    - make lint
+builds:
+-
+  env:
+    - GO111MODULE=on
+    - CGO_ENABLED=0
+  ldflags:
+    - -s -w
+    - -X github.com/knl/pulley/internal/version.Version={{ .Version }}
+    - -X github.com/knl/pulley/internal/version.Revision={{ .FullCommit }}
+    - -X github.com/knl/pulley/internal/version.BuildUser={{ .Env.USER }}
+    - -X github.com/knl/pulley/internal/version.BuildDate={{ .Date }}
+  goos:
+    - darwin
+    - linux
+    - freebsd
+    - openbsd
+  goarch:
+    - amd64
+    - arm
+    - arm64
+  # List of combinations of GOOS + GOARCH + GOARM to ignore.
+  # Default is empty.
+  ignore:
+    - goos: darwin
+      goarch: arm
+    - goos: darwin
+      goarch: arm64
+changelog:
+  # set it to true if you wish to skip the changelog generation
+  skip: true

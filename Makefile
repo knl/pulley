@@ -34,4 +34,7 @@ clean:
 	rm -rf build dist
 	rm -f $(BIN)
 
-.PHONY: test fmt lint tidy clean build
+test-release:
+	goreleaser release --rm-dist --skip-publish --snapshot
+
+.PHONY: test fmt lint tidy clean build test-release
