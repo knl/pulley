@@ -3,7 +3,10 @@
 set -Eeuo pipefail
 
 build_date="$(date '+%Y%m%d-%H:%M:%S')"
-git_version="$(git describe --tags --match "v*" --dirty --abbrev=4 2>/dev/null || true)"
+# let one pass the git version from outside (useful for Nix builds)
+if [ -z "${git_version:-}" ]; then
+    git_version="$(git describe --tags --match "v*" --dirty --abbrev=4 2>/dev/null || true)"
+fi
 if [ -z "$git_version" ]; then
     git_version="v0.0.0-$(git describe --always --dirty --abbrev=4)"
 fi
