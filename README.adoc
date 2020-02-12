@@ -17,7 +17,7 @@ image:https://codebeat.co/badges/56655dd4-44a7-45fd-9d33-0654b5a90452[link=https
                           |           +<------->+ pulley |
                           |   nginx   |         +--------+
 +------------+            |           |
-| prometheus +------------+/metricz   |
+| prometheus +------------+/metrics   |
 +------------+            +-----------+
 ....
 
@@ -83,7 +83,7 @@ Pulley understands the following environment variables:
   https://developer.github.com/webhooks/securing/.
 
 | METRICS_PATH
-| URL path on which Pulley exposes Prometheus metrics. Defaults to `metricz`.
+| URL path on which Pulley exposes Prometheus metrics. Defaults to `metrics`.
 
 | GITHUB_CONTEXT_<int>
 | Set of regular expressions defining contexts to monitor for matching

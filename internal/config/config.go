@@ -106,7 +106,7 @@ func DefaultConfig() *Config {
 		WebhookPath:     "",
 		WebhookToken:    make([]byte, 0),
 		GitHubContexts:  descriptors,
-		MetricsPath:     "metricz",
+		MetricsPath:     "metrics",
 		TrackBuildTimes: false,
 	}
 }
