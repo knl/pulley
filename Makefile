@@ -2,27 +2,36 @@ GO := GO111MODULE=on go
 GOPATH ?= $(shell $(GO) env GOPATH)
 GOBIN ?= $(GOPATH)/bin
 
-default: test
-
-test: build fmt lint
-	go test -race -v ./...
+default: build fmt lint test
 
 fmt:
 	@echo "FORMATTING"
 	find . -type f -name '*.go' -not -path './vendor/*' | xargs gofumpt -s -l -w | tee /dev/stderr
 
-lint:
+lint: fmt
 	@echo "LINTING"
 	GOBIN=$(GOBIN) ./lint.sh
 
+tidy:
+	@echo "TIDYING"
+	$(GO) mod tidy -v
+
+check-tidy: tidy
+	git diff --quiet
+
+test:
+	@echo "TESTING"
+	$(GO) test -race -v ./...
+
 test-coverage:
-	go test -race -coverprofile=coverage.txt -covermode=atomic
+	$(GO) test -race -coverprofile=coverage.txt -covermode=atomic
+
+build: build.sh
+	@echo "BUILDING"
+	./build.sh
 
 clean:
 	rm -rf build dist
 	rm -f $(BIN)
 
-build: build.sh
-	./build.sh
-
-.PHONY: test fmt lint clean build
+.PHONY: test fmt lint tidy clean build
