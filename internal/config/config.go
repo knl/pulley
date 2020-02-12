@@ -20,7 +20,7 @@ type Config struct { // nolint
 	Port            string              // APP_PORT
 	WebhookPath     string              // WEBHOOK_PATH
 	WebhookToken    []byte              // WEBHOOK_TOKEN
-	GitHubContexts  []contextDescriptor // GITHUB_CONTEXT_<int> = repo_regex <RS> regex
+	GitHubContexts  []contextDescriptor // GITHUB_STATUS_<int>_REPO = repo_regex && GITHUB_STATUS_<int>_CONTEXT = regex
 	MetricsPath     string              // METRICS_PATH
 	TrackBuildTimes bool                // TRACK_BUILD_TIMES
 }
@@ -39,35 +39,41 @@ func (config *Config) DefaultContextChecker() ContextChecker {
 	}
 }
 
+const (
+	statusPrefix  = "GITHUB_STATUS_"
+	repoSuffix    = "_REPO"
+	contextSuffix = "_CONTEXT"
+)
+
 func processGithubContexts() ([]contextDescriptor, error) {
-	// Process all GITHUB_CONTEXT_<int> fields
+	// Process all GITHUB_STATUS_<int> fields
 	githubContexts := make(map[uint64]contextDescriptor)
 
 	for _, e := range os.Environ() {
 		pair := strings.SplitN(e, "=", 2)
-		if strings.HasPrefix(pair[0], "GITHUB_CONTEXT_") {
-			entryID, err := strconv.ParseUint(strings.TrimPrefix(pair[0], "GITHUB_CONTEXT_"), 10, 64)
+		if strings.HasPrefix(pair[0], statusPrefix) && strings.HasSuffix(pair[0], repoSuffix) {
+			number := strings.TrimSuffix(strings.TrimPrefix(pair[0], statusPrefix), repoSuffix)
+
+			entryID, err := strconv.ParseUint(number, 10, 64)
 			if err != nil {
-				return nil, fmt.Errorf("environment variable '%s' is not properly formatted, doesn't end with a positive integer, err=%v", pair[0], err)
+				return nil, fmt.Errorf("environment variable '%s' is not properly formatted, doesn't contain a positive integer, err=%v", pair[0], err)
 			}
 
-			descriptor := strings.SplitN(pair[1], "\x1F", 2)
-			if len(descriptor) != 2 {
-				return nil, fmt.Errorf("environment variable '%s' doesn't have two regexes separated by <US>", e)
+			contextEnvName := fmt.Sprintf("%s%d%s", statusPrefix, entryID, contextSuffix)
+
+			contextEnv := os.Getenv(contextEnvName)
+			if contextEnv == "" {
+				return nil, fmt.Errorf("variable '%s' empty or unset", contextEnvName)
 			}
 
-			if len(descriptor[0]) == 0 || len(descriptor[1]) == 0 {
-				return nil, fmt.Errorf("environment variable '%s' misses one (or both) regexes", e)
-			}
-
-			repoRegexp, err := regexp.Compile(descriptor[0])
+			repoRegexp, err := regexp.Compile(pair[1])
 			if err != nil {
 				return nil, fmt.Errorf("could not compile the repository name regex '%s' passed via %s, err=%v", repoRegexp, pair[0], err)
 			}
 
-			contextRegexp, err := regexp.Compile(descriptor[1])
+			contextRegexp, err := regexp.Compile(contextEnv)
 			if err != nil {
-				return nil, fmt.Errorf("could not compile the status check name regex '%s' passed via %s, err=%v", contextRegexp, pair[0], err)
+				return nil, fmt.Errorf("could not compile the status check name regex '%s' passed via %s, err=%v", contextRegexp, contextEnv, err)
 			}
 
 			githubContexts[entryID] = contextDescriptor{

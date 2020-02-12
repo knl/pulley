@@ -85,10 +85,13 @@ Pulley understands the following environment variables:
 | METRICS_PATH
 | URL path on which Pulley exposes Prometheus metrics. Defaults to `metrics`.
 
-| GITHUB_CONTEXT_<int>
+| GITHUB_STATUS_<int>_REPO
 | Set of regular expressions defining contexts to monitor for matching
   repository names. Defaults to regex `:all-jobs$` matching all repositories
   (`.*`). For more details, consult the next section.
+
+| GITHUB_STATUS_<int>_CONTEXT
+| See above. 
 
 |===
 
@@ -102,25 +105,24 @@ configurable via the environment variables, Pulley resorts to using the regular
 expressions (regexes) and the following scheme for the environment variables
 when encoding that information:
 
- GITHUB_CONTEXT_<int> = $repo_name_regex <US> $status_check_name_regex
+ GITHUB_STATUS_<int>_REPO  = $repo_name_regex
+ GITHUB_STATUS_<int>_CONTEXT = $status_check_name_regex
 
 That is, we mimic a prioritized list of regexes to match between the repository
 name and the status check name.
 
-NOTE: `<US>` is an unit separator character (ASCII code `0x1F`, octal `037`) and
-separates two regexes. To embed `<US>` in a shell, use `printf`, as in:
-
- printf "%s\x1F%s" "$repo_name_regex" "$status_check_name_regex"
-
 The list of regexes is processed in order from the smallest number towards the
-highest. If there is a match on the repository name, but not on the status, the
-search will **NOT** continue.
+highest, looking first for the `_REPO` variant. If there is a match on the
+repository name, but not on the status, the search will **NOT** continue.
 
 For example, the following configuration:
 
- GITHUB_CONTEXT_0=-deployment$<US>^terraform-validate
- GITHUB_CONTEXT_1=^knl/pulley$<US>build
- GITHUB_CONTEXT_100=.*<US>:all-jobs$
+ GITHUB_STATUS_0_REPO=-deployment$
+ GITHUB_STATUS_0_CONTEXT=^terraform-validate
+ GITHUB_STATUS_1_REPO=^knl/pulley$
+ GITHUB_STATUS_1_CONTEXT=build
+ GITHUB_STATUS_100_REPO=.*
+ GITHUB_STATUS_100_CONTEXT=:all-jobs$
 
 would check for status checks whose names begin with `terraform-validate` for
 all repositories whose names end with `-deployment`. Then it would check for

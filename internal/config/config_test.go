@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/base64"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -56,19 +57,20 @@ func TestBadToken(t *testing.T) {
 }
 
 var contextErrorDetectingTests = []struct {
-	name     string
-	envName  string
-	envValue string
-	isError  bool
+	name    string
+	envVars []string
+	isError bool
 }{
-	{"MissingNumber", "GITHUB_CONTEXT_", "123", true},
-	{"MissingUS", "GITHUB_CONTEXT_0", "123", true},
-	{"WithUS", "GITHUB_CONTEXT_0", "123\x1F123", false},
-	{"MissingRepoRegex", "GITHUB_CONTEXT_0", "\x1F123", true},
-	{"MissingContextRegex", "GITHUB_CONTEXT_0", "123\x1F", true},
-	{"MissingBothRegexes", "GITHUB_CONTEXT_0", "\x1F", true},
-	{"BrokenRepoRegex", "GITHUB_CONTEXT_0", "*\x1F123", true},
-	{"BrokenContextRegex", "GITHUB_CONTEXT_0", "123\x1F*", true},
+	{"MissingSuffix", []string{"GITHUB_STATUS_=123"}, false}, // not an error, since doesn't have _REPO
+	{"MissingNumber", []string{"GITHUB_STATUS__REPO=123", "GITHUB_STATUS__CONTEXT=123"}, true},
+	{"MissingNumberOneUnderscore", []string{"GITHUB_STATUS_REPO=123", "GITHUB_STATUS_CONTEXT=123"}, true},
+	{"MissingRepo", []string{"GITHUB_STATUS_0_CONTEXT=123"}, false}, // not an error as well, as we always look for _REPO first
+	{"MissingContext", []string{"GITHUB_STATUS_0_REPO=123"}, true},
+	{"BothPresent", []string{"GITHUB_STATUS_0_REPO=123", "GITHUB_STATUS_0_CONTEXT=123"}, false},
+	{"NumberMismatch", []string{"GITHUB_STATUS_0_REPO=123", "GITHUB_STATUS_1_CONTEXT=123"}, true},
+	{"BothMissing", []string{}, false},
+	{"BrokenRepoRegex", []string{"GITHUB_STATUS_123_REPO=*", "GITHUB_STATUS_123_CONTEXT=123"}, true},
+	{"BrokenRepoRegex", []string{"GITHUB_STATUS_123_REPO=123", "GITHUB_STATUS_123_CONTEXT=*"}, true},
 }
 
 func TestGithubContextSimpleParser(t *testing.T) {
@@ -78,7 +80,10 @@ func TestGithubContextSimpleParser(t *testing.T) {
 			// Needed to ensure the test is correct
 			os.Clearenv()
 
-			os.Setenv(tt.envName, tt.envValue)
+			for _, e := range tt.envVars {
+				pair := strings.SplitN(e, "=", 2)
+				os.Setenv(pair[0], pair[1])
+			}
 
 			_, err := Setup()
 			switch tt.isError {
