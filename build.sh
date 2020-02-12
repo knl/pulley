@@ -21,4 +21,5 @@ ldflags=(
     "-X github.com/knl/pulley/internal/version.BuildDate=$build_date"
 )
 
-go build -ldflags="${ldflags[*]}"
+# Use CGO_ENABLED=0 as we don't call any C builds, and will be doing cross compiling
+GO111MODULE=on CGO_ENABLED=0 go build -ldflags="${ldflags[*]}"
