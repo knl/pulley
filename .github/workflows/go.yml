@@ -85,5 +85,4 @@ jobs:
           GOPROXY: "https://proxy.golang.org"
           pulley_build_username: ${{ github.actor }}
           pulley_git_sha: ${{ github.sha }}
-          pulley_git_ref: ${{ github.ref }}
         run: make build

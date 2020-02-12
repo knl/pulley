@@ -26,11 +26,10 @@ func NewCollector() prometheus.Collector {
 	return prometheus.NewGaugeFunc(
 		prometheus.GaugeOpts{
 			Name: "build_info",
-			Help: "A metric with a constant '1' value labeled by version, revision, branch, and goversion from which pulley was built.",
+			Help: "A metric with a constant '1' value labeled by version, revision, and goversion from which pulley was built.",
 			ConstLabels: prometheus.Labels{
 				"version":   Version,
 				"revision":  Revision,
-				"branch":    Branch,
 				"goversion": GoVersion,
 			},
 		},
@@ -40,7 +39,7 @@ func NewCollector() prometheus.Collector {
 
 // versionInfoTmpl contains the template used by Info.
 var versionInfoTmpl = `
-pulley version {{.version}} (branch: {{.branch}}, revision: {{.revision}})
+pulley version {{.version}} (revision: {{.revision}})
   build user:       {{.buildUser}}
   build date:       {{.buildDate}}
   go version:       {{.goVersion}}
@@ -51,7 +50,6 @@ func Print() string {
 	m := map[string]string{
 		"version":   Version,
 		"revision":  Revision,
-		"branch":    Branch,
 		"buildUser": BuildUser,
 		"buildDate": BuildDate,
 		"goVersion": GoVersion,
@@ -68,7 +66,7 @@ func Print() string {
 
 // Info returns version, branch and revision information.
 func Info() string {
-	return fmt.Sprintf("(version=%s, branch=%s, revision=%s)", Version, Branch, Revision)
+	return fmt.Sprintf("(version=%s, revision=%s)", Version, Revision)
 }
 
 // BuildContext returns goVersion, buildUser and buildDate information.
