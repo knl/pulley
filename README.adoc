@@ -93,6 +93,10 @@ Pulley understands the following environment variables:
 | PULLEY_GITHUB_STATUS_<int>_CONTEXT
 | See above. 
 
+| PULLEY_TRACK_BUILD_TIMES
+| If true, Pulley will track and export build times for each build (that is,
+  different context it sees). Accepted range of values is `1`, `t`, `T`, `TRUE`,
+  `true`, `True`, `0`, `f`, `F`, `FALSE`, `false`, `False`.
 |===
 
 ==== GitHub Contexts
