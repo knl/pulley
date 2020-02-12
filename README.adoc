@@ -66,31 +66,31 @@ Pulley understands the following environment variables:
 |===
 | Environment Variable | Description
 
-| APP_HOST
+| PULLEY_HOST
 | The hostname to which Pulley will bind. Defaults to `localhost`.
 
-| APP_PORT
+| PULLEY_PORT
 | The port number to which Pulley will bind. Defaults to `1701`.
 
-| WEBHOOK_PATH
+| PULLEY_WEBHOOK_PATH
 | URL path on which Pulley receives webhooks. Defaults to an empty string,
   meaning that webhook events are handled on the root path (that is,
-  `http://$APP_HOST:$APP_PORT/`).
+  `http://$PULLEY_HOST:$PULLEY_PORT/`).
 
-| WEBHOOK_TOKEN
+| PULLEY_WEBHOOK_TOKEN
 | A **base64** encoded string representing a secret token, used to validate the
   events coming from GitHub. Defaults to an empty string. More details on
   https://developer.github.com/webhooks/securing/.
 
-| METRICS_PATH
+| PULLEY_METRICS_PATH
 | URL path on which Pulley exposes Prometheus metrics. Defaults to `metrics`.
 
-| GITHUB_STATUS_<int>_REPO
+| PULLEY_GITHUB_STATUS_<int>_REPO
 | Set of regular expressions defining contexts to monitor for matching
   repository names. Defaults to regex `:all-jobs$` matching all repositories
   (`.*`). For more details, consult the next section.
 
-| GITHUB_STATUS_<int>_CONTEXT
+| PULLEY_GITHUB_STATUS_<int>_CONTEXT
 | See above. 
 
 |===
@@ -105,8 +105,8 @@ configurable via the environment variables, Pulley resorts to using the regular
 expressions (regexes) and the following scheme for the environment variables
 when encoding that information:
 
- GITHUB_STATUS_<int>_REPO  = $repo_name_regex
- GITHUB_STATUS_<int>_CONTEXT = $status_check_name_regex
+ PULLEY_GITHUB_STATUS_<int>_REPO  = $repo_name_regex
+ PULLEY_GITHUB_STATUS_<int>_CONTEXT = $status_check_name_regex
 
 That is, we mimic a prioritized list of regexes to match between the repository
 name and the status check name.
@@ -117,12 +117,12 @@ repository name, but not on the status, the search will **NOT** continue.
 
 For example, the following configuration:
 
- GITHUB_STATUS_0_REPO=-deployment$
- GITHUB_STATUS_0_CONTEXT=^terraform-validate
- GITHUB_STATUS_1_REPO=^knl/pulley$
- GITHUB_STATUS_1_CONTEXT=build
- GITHUB_STATUS_100_REPO=.*
- GITHUB_STATUS_100_CONTEXT=:all-jobs$
+ PULLEY_GITHUB_STATUS_0_REPO=-deployment$
+ PULLEY_GITHUB_STATUS_0_CONTEXT=^terraform-validate
+ PULLEY_GITHUB_STATUS_1_REPO=^knl/pulley$
+ PULLEY_GITHUB_STATUS_1_CONTEXT=build
+ PULLEY_GITHUB_STATUS_100_REPO=.*
+ PULLEY_GITHUB_STATUS_100_CONTEXT=:all-jobs$
 
 would check for status checks whose names begin with `terraform-validate` for
 all repositories whose names end with `-deployment`. Then it would check for

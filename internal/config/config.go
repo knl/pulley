@@ -16,13 +16,13 @@ type contextDescriptor struct {
 }
 
 type Config struct { // nolint
-	Host            string              // APP_HOST
-	Port            string              // APP_PORT
-	WebhookPath     string              // WEBHOOK_PATH
-	WebhookToken    []byte              // WEBHOOK_TOKEN
-	GitHubContexts  []contextDescriptor // GITHUB_STATUS_<int>_REPO = repo_regex && GITHUB_STATUS_<int>_CONTEXT = regex
-	MetricsPath     string              // METRICS_PATH
-	TrackBuildTimes bool                // TRACK_BUILD_TIMES
+	Host            string              // PULLEY_HOST
+	Port            string              // PULLEY_PORT
+	WebhookPath     string              // PULLEY_WEBHOOK_PATH
+	WebhookToken    []byte              // PULLEY_WEBHOOK_TOKEN
+	GitHubContexts  []contextDescriptor // PULLEY_GITHUB_STATUS_<int>_REPO = repo_regex && PULLEY_GITHUB_STATUS_<int>_CONTEXT = regex
+	MetricsPath     string              // PULLEY_METRICS_PATH
+	TrackBuildTimes bool                // PULLEY_TRACK_BUILD_TIMES
 }
 
 type ContextChecker func(repo, context string) bool
@@ -40,13 +40,13 @@ func (config *Config) DefaultContextChecker() ContextChecker {
 }
 
 const (
-	statusPrefix  = "GITHUB_STATUS_"
+	statusPrefix  = "PULLEY_GITHUB_STATUS_"
 	repoSuffix    = "_REPO"
 	contextSuffix = "_CONTEXT"
 )
 
 func processGithubContexts() ([]contextDescriptor, error) {
-	// Process all GITHUB_STATUS_<int> fields
+	// Process all PULLEY_GITHUB_STATUS_<int> fields
 	githubContexts := make(map[uint64]contextDescriptor)
 
 	for _, e := range os.Environ() {
@@ -121,29 +121,29 @@ func DefaultConfig() *Config {
 func Setup() (*Config, error) {
 	config := DefaultConfig()
 
-	host, ok := os.LookupEnv("APP_HOST")
+	host, ok := os.LookupEnv("PULLEY_HOST")
 	if ok {
 		config.Host = host
 	}
 
-	port, ok := os.LookupEnv("APP_PORT")
+	port, ok := os.LookupEnv("PULLEY_PORT")
 	if ok {
 		config.Port = port
 	}
 
-	webhookPath, ok := os.LookupEnv("WEBHOOK_PATH")
+	webhookPath, ok := os.LookupEnv("PULLEY_WEBHOOK_PATH")
 	if ok {
 		config.WebhookPath = webhookPath
 	}
 
-	webhookToken, err := base64.StdEncoding.DecodeString(os.Getenv("WEBHOOK_TOKEN"))
+	webhookToken, err := base64.StdEncoding.DecodeString(os.Getenv("PULLEY_WEBHOOK_TOKEN"))
 	if err != nil {
-		return nil, fmt.Errorf("could not decode the webhook secret token from WEBHOOK_TOKEN, %v", err)
+		return nil, fmt.Errorf("could not decode the webhook secret token from PULLEY_WEBHOOK_TOKEN, %v", err)
 	}
 
 	config.WebhookToken = webhookToken
 
-	metricsPath, ok := os.LookupEnv("METRICS_PATH")
+	metricsPath, ok := os.LookupEnv("PULLEY_METRICS_PATH")
 	if ok {
 		config.MetricsPath = metricsPath
 	}
@@ -157,7 +157,7 @@ func Setup() (*Config, error) {
 		config.GitHubContexts = githubContexts
 	}
 
-	if b, err := strconv.ParseBool(os.Getenv("TRACK_BUILD_TIMES")); err == nil {
+	if b, err := strconv.ParseBool(os.Getenv("PULLEY_TRACK_BUILD_TIMES")); err == nil {
 		config.TrackBuildTimes = b
 	}
 
