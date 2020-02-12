@@ -40,14 +40,21 @@ jobs:
         run: make check-tidy
 
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version:
+          - 1.13.x
+        os:
+        - macos-latest
+        - ubuntu-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@v2
       - name: Setup Go
         uses: actions/setup-go@v1
         with:
-          go-version: 1.13.x
+          go-version: ${{ matrix.go-version }}
       - uses: actions/cache@v1
         id: cache
         with:
