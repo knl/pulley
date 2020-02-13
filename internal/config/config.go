@@ -15,21 +15,53 @@ type contextDescriptor struct {
 	context *regexp.Regexp
 }
 
+type TimingStrategy int
+
+const (
+	_ TimingStrategy = iota
+	AggregateStrategy
+)
+
+var strategyToString = map[TimingStrategy]string{
+	AggregateStrategy: "aggregate",
+}
+
+func (ts TimingStrategy) String() string {
+	return strategyToString[ts]
+}
+
+func parseStrategy(in string) (TimingStrategy, error) {
+	for s, ss := range strategyToString {
+		if in == ss {
+			return s, nil
+		}
+	}
+
+	allowed := make([]string, 0, len(strategyToString))
+	for _, s := range strategyToString {
+		allowed = append(allowed, s)
+	}
+
+	return 0, fmt.Errorf("could not translate '%s' into an appropriate strategy (allowed values: %v)", in, allowed)
+}
+
 type Config struct { // nolint
-	Host            string              // PULLEY_HOST
-	Port            string              // PULLEY_PORT
-	WebhookPath     string              // PULLEY_WEBHOOK_PATH
-	WebhookToken    []byte              // PULLEY_WEBHOOK_TOKEN
-	GitHubContexts  []contextDescriptor // PULLEY_GITHUB_STATUS_<int>_REPO = repo_regex && PULLEY_GITHUB_STATUS_<int>_CONTEXT = regex
-	MetricsPath     string              // PULLEY_METRICS_PATH
-	TrackBuildTimes bool                // PULLEY_TRACK_BUILD_TIMES
+	Host            string         // PULLEY_HOST
+	Port            string         // PULLEY_PORT
+	WebhookPath     string         // PULLEY_WEBHOOK_PATH
+	WebhookToken    []byte         // PULLEY_WEBHOOK_TOKEN
+	Strategy        TimingStrategy // PULLEY_PR_TIMING_STRATEGY
+	MetricsPath     string         // PULLEY_METRICS_PATH
+	TrackBuildTimes bool           // PULLEY_TRACK_BUILD_TIMES
+	// Used iff the strategy is 'aggregate'
+	AggregateStrategyContexts []contextDescriptor // PULLEY_STRATEGY_AGGREGATE_REPO_REGEX_<int> = repo_regex && PULLEY_STRATEGY_AGGREGATE_CONTEXT_REGEX_<int> = regex
 }
 
 type ContextChecker func(repo, context string) bool
 
 func (config *Config) DefaultContextChecker() ContextChecker {
 	return func(repo, context string) bool {
-		for _, entry := range config.GitHubContexts {
+		for _, entry := range config.AggregateStrategyContexts {
 			if entry.repo.MatchString(repo) {
 				return entry.context.MatchString(context)
 			}
@@ -40,26 +72,23 @@ func (config *Config) DefaultContextChecker() ContextChecker {
 }
 
 const (
-	statusPrefix  = "PULLEY_GITHUB_STATUS_"
-	repoSuffix    = "_REPO"
-	contextSuffix = "_CONTEXT"
+	repoPrefix    = "PULLEY_STRATEGY_AGGREGATE_REPO_REGEX_"
+	contextPrefix = "PULLEY_STRATEGY_AGGREGATE_CONTEXT_REGEX_"
 )
 
-func processGithubContexts() ([]contextDescriptor, error) {
-	// Process all PULLEY_GITHUB_STATUS_<int> fields
-	githubContexts := make(map[uint64]contextDescriptor)
+func processAggregateStrategyContexts() ([]contextDescriptor, error) {
+	// Process all PULLEY_REGEX_TIMING_<int> fields
+	aggregateStrategyContexts := make(map[uint64]contextDescriptor)
 
 	for _, e := range os.Environ() {
 		pair := strings.SplitN(e, "=", 2)
-		if strings.HasPrefix(pair[0], statusPrefix) && strings.HasSuffix(pair[0], repoSuffix) {
-			number := strings.TrimSuffix(strings.TrimPrefix(pair[0], statusPrefix), repoSuffix)
-
-			entryID, err := strconv.ParseUint(number, 10, 64)
+		if strings.HasPrefix(pair[0], repoPrefix) {
+			entryID, err := strconv.ParseUint(strings.TrimPrefix(pair[0], repoPrefix), 10, 64)
 			if err != nil {
-				return nil, fmt.Errorf("environment variable '%s' is not properly formatted, doesn't contain a positive integer, err=%v", pair[0], err)
+				return nil, fmt.Errorf("environment variable '%s' is not properly formatted, doesn't end with a positive integer, err=%v", pair[0], err)
 			}
 
-			contextEnvName := fmt.Sprintf("%s%d%s", statusPrefix, entryID, contextSuffix)
+			contextEnvName := fmt.Sprintf("%s%d", contextPrefix, entryID)
 
 			contextEnv := os.Getenv(contextEnvName)
 			if contextEnv == "" {
@@ -76,7 +105,7 @@ func processGithubContexts() ([]contextDescriptor, error) {
 				return nil, fmt.Errorf("could not compile the status check name regex '%s' passed via %s, err=%v", contextRegexp, contextEnv, err)
 			}
 
-			githubContexts[entryID] = contextDescriptor{
+			aggregateStrategyContexts[entryID] = contextDescriptor{
 				repo:    repoRegexp,
 				context: contextRegexp,
 			}
@@ -85,7 +114,7 @@ func processGithubContexts() ([]contextDescriptor, error) {
 
 	// Sort them by priority
 	var keys []uint64
-	for k := range githubContexts {
+	for k := range aggregateStrategyContexts {
 		keys = append(keys, k)
 	}
 
@@ -93,7 +122,7 @@ func processGithubContexts() ([]contextDescriptor, error) {
 
 	var descriptors []contextDescriptor
 	for _, k := range keys {
-		descriptors = append(descriptors, githubContexts[k])
+		descriptors = append(descriptors, aggregateStrategyContexts[k])
 	}
 
 	return descriptors, nil
@@ -107,13 +136,14 @@ func DefaultConfig() *Config {
 	})
 
 	return &Config{
-		Host:            "localhost",
-		Port:            "1701",
-		WebhookPath:     "",
-		WebhookToken:    make([]byte, 0),
-		GitHubContexts:  descriptors,
-		MetricsPath:     "metrics",
-		TrackBuildTimes: false,
+		Host:                      "localhost",
+		Port:                      "1701",
+		WebhookPath:               "",
+		WebhookToken:              make([]byte, 0),
+		Strategy:                  AggregateStrategy,
+		AggregateStrategyContexts: descriptors,
+		MetricsPath:               "metrics",
+		TrackBuildTimes:           false,
 	}
 }
 
@@ -148,13 +178,30 @@ func Setup() (*Config, error) {
 		config.MetricsPath = metricsPath
 	}
 
-	githubContexts, err := processGithubContexts()
-	if err != nil {
-		return nil, err
+	strategyString, ok := os.LookupEnv("PULLEY_PR_TIMING_STRATEGY")
+	if ok {
+		s, err := parseStrategy(strategyString)
+		if err != nil {
+			return nil, err
+		}
+
+		config.Strategy = s
+	} else {
+		config.Strategy = AggregateStrategy
 	}
 
-	if len(githubContexts) != 0 {
-		config.GitHubContexts = githubContexts
+	switch config.Strategy {
+	case AggregateStrategy:
+		aggregateStrategyContexts, err := processAggregateStrategyContexts()
+		if err != nil {
+			return nil, err
+		}
+
+		if len(aggregateStrategyContexts) != 0 {
+			config.AggregateStrategyContexts = aggregateStrategyContexts
+		}
+	default:
+		return nil, fmt.Errorf("broken configuration, unrecognized strategy '%s'", config.Strategy.String())
 	}
 
 	if b, err := strconv.ParseBool(os.Getenv("PULLEY_TRACK_BUILD_TIMES")); err == nil {

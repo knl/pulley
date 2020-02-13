@@ -61,16 +61,16 @@ var contextErrorDetectingTests = []struct {
 	envVars []string
 	isError bool
 }{
-	{"MissingSuffix", []string{"PULLEY_GITHUB_STATUS_=123"}, false}, // not an error, since doesn't have _REPO
-	{"MissingNumber", []string{"PULLEY_GITHUB_STATUS__REPO=123", "PULLEY_GITHUB_STATUS__CONTEXT=123"}, true},
-	{"MissingNumberOneUnderscore", []string{"PULLEY_GITHUB_STATUS_REPO=123", "PULLEY_GITHUB_STATUS_CONTEXT=123"}, true},
-	{"MissingRepo", []string{"PULLEY_GITHUB_STATUS_0_CONTEXT=123"}, false}, // not an error as well, as we always look for _REPO first
-	{"MissingContext", []string{"PULLEY_GITHUB_STATUS_0_REPO=123"}, true},
-	{"BothPresent", []string{"PULLEY_GITHUB_STATUS_0_REPO=123", "PULLEY_GITHUB_STATUS_0_CONTEXT=123"}, false},
-	{"NumberMismatch", []string{"PULLEY_GITHUB_STATUS_0_REPO=123", "PULLEY_GITHUB_STATUS_1_CONTEXT=123"}, true},
+	{"ShorterPrefix", []string{"PULLEY_REGEX_TIMING_=123"}, false},                                                                          // not an error, since doesn't have _REPO
+	{"PrefixShortByUnderscore", []string{"PULLEY_STRATEGY_AGGREGATE_REPO_REGEX=123", "PULLEY_STRATEGY_AGGREGATE_CONTEXT_REGEX=123"}, false}, // not an error either, as needs to end with REPO_
+	{"MissingNumber", []string{"PULLEY_STRATEGY_AGGREGATE_REPO_REGEX_=123", "PULLEY_STRATEGY_AGGREGATE_CONTEXT_REGEX_=123"}, true},
+	{"MissingRepo", []string{"PULLEY_STRATEGY_AGGREGATE_CONTEXT_REGEX_0=123"}, false}, // not an error as well, as we always look for _REPO first
+	{"MissingContext", []string{"PULLEY_STRATEGY_AGGREGATE_REPO_REGEX_0=123"}, true},
+	{"BothPresent", []string{"PULLEY_STRATEGY_AGGREGATE_REPO_REGEX_0=123", "PULLEY_STRATEGY_AGGREGATE_CONTEXT_REGEX_0=123"}, false},
+	{"NumberMismatch", []string{"PULLEY_STRATEGY_AGGREGATE_REPO_REGEX_0=123", "PULLEY_STRATEGY_AGGREGATE_CONTEXT_REGEX_1=123"}, true},
 	{"BothMissing", []string{}, false},
-	{"BrokenRepoRegex", []string{"PULLEY_GITHUB_STATUS_123_REPO=*", "PULLEY_GITHUB_STATUS_123_CONTEXT=123"}, true},
-	{"BrokenRepoRegex", []string{"PULLEY_GITHUB_STATUS_123_REPO=123", "PULLEY_GITHUB_STATUS_123_CONTEXT=*"}, true},
+	{"BrokenRepoRegex", []string{"PULLEY_STRATEGY_AGGREGATE_REPO_REGEX_123=*", "PULLEY_STRATEGY_AGGREGATE_CONTEXT_REGEX_123=123"}, true},
+	{"BrokenContextRegex", []string{"PULLEY_STRATEGY_AGGREGATE_REPO_REGEX_123=123", "PULLEY_STRATEGY_AGGREGATE_CONTEXT_REGEX_123=*"}, true},
 }
 
 func TestGithubContextSimpleParser(t *testing.T) {

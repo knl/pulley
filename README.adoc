@@ -85,13 +85,18 @@ Pulley understands the following environment variables:
 | PULLEY_METRICS_PATH
 | URL path on which Pulley exposes Prometheus metrics. Defaults to `metrics`.
 
-| PULLEY_GITHUB_STATUS_<int>_REPO
+| PULLEY_PR_TIMING_STRATEGY
+| Which strategy Pulley should use to time the PRs. That is, how to detect when
+  PR building started and ended. Currently, the only available one is `regex`.
+  If missing or unset, defaults to `regex`.
+
+| PULLEY_STRATEGY_AGGREGATE_REPO_REGEX_<int>
 | Set of regular expressions defining contexts to monitor for matching
   repository names. Defaults to regex `:all-jobs$` matching all repositories
   (`.*`). For more details, consult the next section.
 
-| PULLEY_GITHUB_STATUS_<int>_CONTEXT
-| See above. 
+| PULLEY_STRATEGY_AGGREGATE_CONTEXT_REGEX_<int>
+| See above.
 
 | PULLEY_TRACK_BUILD_TIMES
 | If true, Pulley will track and export build times for each build (that is,
@@ -99,18 +104,28 @@ Pulley understands the following environment variables:
   `true`, `True`, `0`, `f`, `F`, `FALSE`, `false`, `False`.
 |===
 
-==== GitHub Contexts
+==== PR Timing Strategies
 
-Pulley assumes that each repository has one required status check, which, when
-successful enables a PR to be merged.
+A PR timing strategy is how Pulley determines when the CI started building the
+PR, and when CI finished. It deals with received status checks coming from
+GitHub.
+
+At the moment, Pulley supports only a single PR timing strategy, `aggregate`.
+
+===== The aggregate strategy
+
+This strategy assumes that each repository has one _aggregate_ job defined, that
+finishes when all other jobs are done and emits a corresponding status check.
+This job determines if the PR is to be merged. Another use of this strategy is
+for the case when there is a single required status check defined in a repo.
 
 To provide versatility in configuration, while keeping it simple and
 configurable via the environment variables, Pulley resorts to using the regular
 expressions (regexes) and the following scheme for the environment variables
 when encoding that information:
 
- PULLEY_GITHUB_STATUS_<int>_REPO  = $repo_name_regex
- PULLEY_GITHUB_STATUS_<int>_CONTEXT = $status_check_name_regex
+ PULLEY_STRATEGY_AGGREGATE_REPO_REGEX_<int> = $repo_name_regex
+ PULLEY_STRATEGY_AGGREGATE_CONTEXT_REGEX_<int> = $status_check_name_regex
 
 That is, we mimic a prioritized list of regexes to match between the repository
 name and the status check name.
@@ -121,12 +136,12 @@ repository name, but not on the status, the search will **NOT** continue.
 
 For example, the following configuration:
 
- PULLEY_GITHUB_STATUS_0_REPO=-deployment$
- PULLEY_GITHUB_STATUS_0_CONTEXT=^terraform-validate
- PULLEY_GITHUB_STATUS_1_REPO=^knl/pulley$
- PULLEY_GITHUB_STATUS_1_CONTEXT=build
- PULLEY_GITHUB_STATUS_100_REPO=.*
- PULLEY_GITHUB_STATUS_100_CONTEXT=:all-jobs$
+ PULLEY_STRATEGY_AGGREGATE_REPO_REGEX_0=-deployment$
+ PULLEY_STRATEGY_AGGREGATE_CONTEXT_REGEX_0=^terraform-validate
+ PULLEY_STRATEGY_AGGREGATE_REPO_REGEX_1=^knl/pulley$
+ PULLEY_STRATEGY_AGGREGATE_CONTEXT_REGEX_1=build
+ PULLEY_STRATEGY_AGGREGATE_REPO_REGEX_100=.*
+ PULLEY_STRATEGY_AGGREGATE_CONTEXT_REGEX_100=:all-jobs$
 
 would check for status checks whose names begin with `terraform-validate` for
 all repositories whose names end with `-deployment`. Then it would check for
