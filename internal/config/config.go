@@ -57,6 +57,25 @@ type Config struct { // nolint
 	AggregateStrategyContexts []contextDescriptor // PULLEY_STRATEGY_AGGREGATE_REPO_REGEX_<int> = repo_regex && PULLEY_STRATEGY_AGGREGATE_CONTEXT_REGEX_<int> = regex
 }
 
+func DefaultConfig() *Config {
+	var descriptors []contextDescriptor
+	descriptors = append(descriptors, contextDescriptor{
+		repo:    regexp.MustCompile(".*"),
+		context: regexp.MustCompile(":all-jobs$"),
+	})
+
+	return &Config{
+		Host:                      "localhost",
+		Port:                      "1701",
+		WebhookPath:               "",
+		WebhookToken:              make([]byte, 0),
+		Strategy:                  AggregateStrategy,
+		AggregateStrategyContexts: descriptors,
+		MetricsPath:               "metrics",
+		TrackBuildTimes:           false,
+	}
+}
+
 type ContextChecker func(repo, context string) bool
 
 func (config *Config) DefaultContextChecker() ContextChecker {
@@ -126,25 +145,6 @@ func processAggregateStrategyContexts() ([]contextDescriptor, error) {
 	}
 
 	return descriptors, nil
-}
-
-func DefaultConfig() *Config {
-	var descriptors []contextDescriptor
-	descriptors = append(descriptors, contextDescriptor{
-		repo:    regexp.MustCompile(".*"),
-		context: regexp.MustCompile(":all-jobs$"),
-	})
-
-	return &Config{
-		Host:                      "localhost",
-		Port:                      "1701",
-		WebhookPath:               "",
-		WebhookToken:              make([]byte, 0),
-		Strategy:                  AggregateStrategy,
-		AggregateStrategyContexts: descriptors,
-		MetricsPath:               "metrics",
-		TrackBuildTimes:           false,
-	}
 }
 
 // Setup configurations with environment variables
