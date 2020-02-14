@@ -95,3 +95,37 @@ func TestGithubContextSimpleParser(t *testing.T) {
 		})
 	}
 }
+
+func TestTokenNotInOutput(t *testing.T) {
+	// Needed to ensure the test is correct
+	os.Clearenv()
+
+	token := "secret token should not be shown"
+	encoded := base64.StdEncoding.EncodeToString([]byte(token))
+
+	os.Setenv("PULLEY_WEBHOOK_TOKEN", encoded)
+
+	assert := assert.New(t)
+
+	config, err := Setup()
+	assert.NoError(err)
+
+	printout, err := config.Print()
+	assert.NoError(err)
+	assert.NotContains(printout, token)
+	assert.NotContains(printout, encoded)
+}
+
+func TestTokenShowsAsEmpty(t *testing.T) {
+	// Needed to ensure the test is correct
+	os.Clearenv()
+
+	assert := assert.New(t)
+
+	config, err := Setup()
+	assert.NoError(err)
+
+	printout, err := config.Print()
+	assert.NoError(err)
+	assert.Contains(printout, "<empty>")
+}

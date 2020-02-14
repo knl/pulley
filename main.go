@@ -23,6 +23,8 @@ func main() {
 		log.Fatal("Configuration step failed", err)
 	}
 
+	log.Println(config.Print())
+
 	pulley := service.Pulley{
 		Updates: make(chan interface{}, 100),
 		Metrics: metrics.NewGithubMetrics(),

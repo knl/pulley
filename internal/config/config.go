@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -8,11 +9,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 )
 
 type contextDescriptor struct {
-	repo    *regexp.Regexp
-	context *regexp.Regexp
+	Repo    *regexp.Regexp
+	Context *regexp.Regexp
 }
 
 type TimingStrategy int
@@ -60,8 +62,8 @@ type Config struct { // nolint
 func DefaultConfig() *Config {
 	var descriptors []contextDescriptor
 	descriptors = append(descriptors, contextDescriptor{
-		repo:    regexp.MustCompile(".*"),
-		context: regexp.MustCompile(":all-jobs$"),
+		Repo:    regexp.MustCompile(".*"),
+		Context: regexp.MustCompile(":all-jobs$"),
 	})
 
 	return &Config{
@@ -81,8 +83,8 @@ type ContextChecker func(repo, context string) bool
 func (config *Config) DefaultContextChecker() ContextChecker {
 	return func(repo, context string) bool {
 		for _, entry := range config.AggregateStrategyContexts {
-			if entry.repo.MatchString(repo) {
-				return entry.context.MatchString(context)
+			if entry.Repo.MatchString(repo) {
+				return entry.Context.MatchString(context)
 			}
 		}
 
@@ -125,8 +127,8 @@ func processAggregateStrategyContexts() ([]contextDescriptor, error) {
 			}
 
 			aggregateStrategyContexts[entryID] = contextDescriptor{
-				repo:    repoRegexp,
-				context: contextRegexp,
+				Repo:    repoRegexp,
+				Context: contextRegexp,
 			}
 		}
 	}
@@ -213,4 +215,45 @@ func Setup() (*Config, error) {
 	}
 
 	return configStrategies(config)
+}
+
+var configOutputTmpl = `
+pulley is starting with the following configuration:
+  Host:            {{.Host}}
+  Port:            {{.Port}}
+  MetricsPath:     /{{.MetricsPath}}
+  WebhookPath:     /{{.WebhookPath}}
+  WebhookToken:    {{with .WebhookToken}}{{printf "%+.4q" .| dequote}}...{{else}}<empty>{{end}}
+  TrackBuildTimes: {{.TrackBuildTimes}}
+  Strategy:        {{.Strategy}}
+  {{template "aggregate" .AggregateStrategyContexts}}
+`
+
+var aggregateOutputTmpl = `
+{{define "aggregate"}}Aggregate Strategy configuration:{{range .}}
+   - repo:    {{.Repo}}
+     context: {{.Context}}
+  {{end}}
+{{end}}
+`
+
+// Returns a string containing the configuration, useful for logging
+func (config *Config) Print() (string, error) {
+	t := template.Must(template.New("config").Funcs(template.FuncMap{
+		"dequote": func(s string) string {
+			return strings.Trim(s, `"`)
+		},
+	}).Parse(configOutputTmpl))
+
+	_, err := t.Parse(aggregateOutputTmpl)
+	if err != nil {
+		return "", fmt.Errorf("problem parsing aggregate configuration: %s", err)
+	}
+
+	var buf bytes.Buffer
+	if err := t.ExecuteTemplate(&buf, "config", config); err != nil {
+		return "", fmt.Errorf("could not output configuration, %s", err)
+	}
+
+	return strings.TrimSpace(buf.String()), nil
 }
