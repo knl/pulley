@@ -147,6 +147,36 @@ func processAggregateStrategyContexts() ([]contextDescriptor, error) {
 	return descriptors, nil
 }
 
+func configStrategies(config *Config) (*Config, error) {
+	strategyString, ok := os.LookupEnv("PULLEY_PR_TIMING_STRATEGY")
+	if ok {
+		s, err := parseStrategy(strategyString)
+		if err != nil {
+			return nil, err
+		}
+
+		config.Strategy = s
+	} else {
+		config.Strategy = AggregateStrategy
+	}
+
+	switch config.Strategy {
+	case AggregateStrategy:
+		aggregateStrategyContexts, err := processAggregateStrategyContexts()
+		if err != nil {
+			return nil, err
+		}
+
+		if len(aggregateStrategyContexts) != 0 {
+			config.AggregateStrategyContexts = aggregateStrategyContexts
+		}
+	default:
+		return nil, fmt.Errorf("broken configuration, unrecognized strategy '%s'", config.Strategy.String())
+	}
+
+	return config, nil
+}
+
 // Setup configurations with environment variables
 func Setup() (*Config, error) {
 	config := DefaultConfig()
@@ -178,35 +208,9 @@ func Setup() (*Config, error) {
 		config.MetricsPath = metricsPath
 	}
 
-	strategyString, ok := os.LookupEnv("PULLEY_PR_TIMING_STRATEGY")
-	if ok {
-		s, err := parseStrategy(strategyString)
-		if err != nil {
-			return nil, err
-		}
-
-		config.Strategy = s
-	} else {
-		config.Strategy = AggregateStrategy
-	}
-
-	switch config.Strategy {
-	case AggregateStrategy:
-		aggregateStrategyContexts, err := processAggregateStrategyContexts()
-		if err != nil {
-			return nil, err
-		}
-
-		if len(aggregateStrategyContexts) != 0 {
-			config.AggregateStrategyContexts = aggregateStrategyContexts
-		}
-	default:
-		return nil, fmt.Errorf("broken configuration, unrecognized strategy '%s'", config.Strategy.String())
-	}
-
 	if b, err := strconv.ParseBool(os.Getenv("PULLEY_TRACK_BUILD_TIMES")); err == nil {
 		config.TrackBuildTimes = b
 	}
 
-	return config, nil
+	return configStrategies(config)
 }
