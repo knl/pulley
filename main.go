@@ -14,25 +14,7 @@ import (
 	"github.com/knl/pulley/internal/version"
 )
 
-func main() {
-	log.Println("server started")
-	log.Println(version.Print())
-
-	config, err := config.Setup()
-	if err != nil {
-		log.Fatal("Configuration step failed", err)
-	}
-
-	log.Println(config.Print())
-
-	pulley := service.Pulley{
-		Updates: make(chan interface{}, 100),
-		Metrics: metrics.NewGithubMetrics(),
-		Token:   config.WebhookToken,
-	}
-
-	pulley.MetricsProcessor(config.DefaultContextChecker(), config.TrackBuildTimes)
-
+func newWebhookHandler(pulley *service.Pulley) http.Handler {
 	// instrument the hook handler, so we could track how well we respond
 	inFlightGauge := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "webhook_in_flight_requests",
@@ -74,15 +56,35 @@ func main() {
 
 	// Instrument the handlers with all the metrics, injecting the "handler"
 	// label by currying.
-	chain := promhttp.InstrumentHandlerInFlight(inFlightGauge,
+	return promhttp.InstrumentHandlerInFlight(inFlightGauge,
 		promhttp.InstrumentHandlerDuration(duration,
 			promhttp.InstrumentHandlerCounter(counter,
 				promhttp.InstrumentHandlerRequestSize(requestSize, pulley.HookHandler()),
 			),
 		),
 	)
+}
 
-	http.Handle("/"+config.WebhookPath, chain)
+func main() {
+	log.Println("server started")
+	log.Println(version.Print())
+
+	config, err := config.Setup()
+	if err != nil {
+		log.Fatal("Configuration step failed", err)
+	}
+
+	log.Println(config.Print())
+
+	pulley := service.Pulley{
+		Updates: make(chan interface{}, 100),
+		Metrics: metrics.NewGithubMetrics(),
+		Token:   config.WebhookToken,
+	}
+
+	pulley.MetricsProcessor(config.DefaultContextChecker(), config.TrackBuildTimes)
+
+	http.Handle("/"+config.WebhookPath, newWebhookHandler(&pulley))
 	http.Handle("/"+config.MetricsPath, promhttp.Handler())
 
 	// Listen & Serve
