@@ -82,6 +82,11 @@ func main() {
 		Token:   config.WebhookToken,
 	}
 
+	// TODO: carve out a strategy interface here
+	// Which should also have a save/restore functionality
+	// We only save liveSHAs, as they are important. Prometheus handles all the metrics for us.
+
+	// TODO: write a 'phased' strategy
 	pulley.MetricsProcessor(config.DefaultContextChecker(), config.TrackBuildTimes)
 
 	http.Handle("/"+config.WebhookPath, newWebhookHandler(&pulley))
