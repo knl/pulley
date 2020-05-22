@@ -12,6 +12,8 @@ linters:
    - lll
    - funlen  # TODO: remove
    - gomnd
+   - goerr113  # TODO: remove would be good to have modern error handling
+   - testpackage  # I want to test internal methods
  presets:
    - bugs
    - unused

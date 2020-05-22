@@ -77,13 +77,13 @@ func collectKeys(database map[Key]float64, metric string) []Key {
 }
 
 // SETUP
-// Importantly you need to call Run() once you've done what you need
+// Importantly you need to call Run() once you've done what you need.
 func TestMain(m *testing.M) {
 	log.SetOutput(ioutil.Discard)
 	os.Exit(m.Run())
 }
 
-// If only PullEvents occur, there should be no other events detected
+// If only PullEvents occur, there should be no other events detected.
 func TestPullEventsRecognized(t *testing.T) {
 	m := fakeMetrics{
 		database: make(map[Key]float64),
@@ -113,7 +113,7 @@ func TestPullEventsRecognized(t *testing.T) {
 	assert.Empty(collectKeys(m.database, "commit_event"))
 }
 
-// If only BranchEvents occur, there should be no other events detected
+// If only BranchEvents occur, there should be no other events detected.
 func TestBranchEventsRecognized(t *testing.T) {
 	m := fakeMetrics{
 		database: make(map[Key]float64),
@@ -144,7 +144,7 @@ func TestBranchEventsRecognized(t *testing.T) {
 }
 
 // Correctly count CI validation times
-// Send a new PR event, CI pending, CI success
+// Send a new PR event, CI pending, CI success.
 func TestCIValidationWithPending(t *testing.T) {
 	m := fakeMetrics{
 		database: make(map[Key]float64),
@@ -196,7 +196,7 @@ func TestCIValidationWithPending(t *testing.T) {
 }
 
 // Correctly count CI validation times
-// Send a new PR event, straight to CI success
+// Send a new PR event, straight to CI success.
 func TestCIValidationWithoutPending(t *testing.T) {
 	m := fakeMetrics{
 		database: make(map[Key]float64),

@@ -103,7 +103,7 @@ func ParseStatus(in string) (Status, error) {
 	return 0, fmt.Errorf("could not translate '%s' into a Status", in)
 }
 
-// When there is an update to a Pull Request, such as creation, closing, re-opening
+// When there is an update to a Pull Request, such as creation, closing, re-opening.
 type PullUpdate struct {
 	Repo      string
 	Action    PREvent
@@ -114,7 +114,7 @@ type PullUpdate struct {
 }
 
 // When the branch has been updated, either due to a push or force-push
-// Not interested in closing, that PullUpdate handles
+// Not interested in closing, that PullUpdate handles.
 type BranchUpdate struct {
 	Repo      string
 	Action    BranchEvent
@@ -123,7 +123,7 @@ type BranchUpdate struct {
 	Timestamp time.Time
 }
 
-// When we get a status notification from CI
+// When we get a status notification from CI.
 type CommitUpdate struct {
 	Repo      string
 	Status    Status

@@ -47,7 +47,7 @@ func parseStrategy(in string) (TimingStrategy, error) {
 	return 0, fmt.Errorf("could not translate '%s' into an appropriate strategy (allowed values: %v)", in, allowed)
 }
 
-type Config struct { // nolint
+type Config struct {
 	Host            string         // PULLEY_HOST
 	Port            string         // PULLEY_PORT
 	WebhookPath     string         // PULLEY_WEBHOOK_PATH
@@ -179,7 +179,7 @@ func configStrategies(config *Config) (*Config, error) {
 	return config, nil
 }
 
-// Setup configurations with environment variables
+// Setup configurations with environment variables.
 func Setup() (*Config, error) {
 	config := DefaultConfig()
 
@@ -237,7 +237,7 @@ var aggregateOutputTmpl = `
 {{end}}
 `
 
-// Returns a string containing the configuration, useful for logging
+// Returns a string containing the configuration, useful for logging.
 func (config *Config) Print() (string, error) {
 	t := template.Must(template.New("config").Funcs(template.FuncMap{
 		"dequote": func(s string) string {
