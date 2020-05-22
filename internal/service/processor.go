@@ -83,19 +83,19 @@ func processCommitUpdate(up events.CommitUpdate, liveSHAs *liveSHAMap, publisher
 		return
 	}
 
-	switch up.Status {
-	case events.Pending:
-		// got the very first status check for this SHA
-		if !state.CheckSeen {
-			startTime := up.Timestamp.Sub(state.Time)
-			log.Printf("CI Start time for SHA %s is %s", up.SHA, startTime)
-			publisher.RegisterStart(up.Repo, startTime.Seconds())
-		}
+	// The first status can be anything, pending, error, success, ...
+	if !state.CheckSeen {
+		startTime := up.Timestamp.Sub(state.Time)
+		log.Printf("CI Start time for SHA %s is %s", up.SHA, startTime)
+		publisher.RegisterStart(up.Repo, startTime.Seconds())
 
 		// This will be propagated to liveSHAs
 		state.CheckSeen = true
 		state.CIStart = up.Timestamp
+	}
 
+	switch up.Status {
+	case events.Pending:
 		// Track individual builds
 		if trackBuildTimes {
 			(*liveSHAs)[up.SHA].BuildStarts[up.Context] = up.Timestamp
