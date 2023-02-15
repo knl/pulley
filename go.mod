@@ -4,6 +4,6 @@ go 1.14
 
 require (
 	github.com/google/go-github/v29 v29.0.2
-	github.com/prometheus/client_golang v1.4.0
+	github.com/prometheus/client_golang v1.11.1
 	github.com/stretchr/testify v1.4.0
 )
